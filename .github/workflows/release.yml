@@ -1,0 +1,42 @@
+name: Mod release
+
+# A maintainer pushes the tag <id>-v<version>; this builds that mod's zip and makes a draft release of it, which the
+# maintainer publishes after trying it in game (AGENTS.md, "Releases"). Waypoint ignores drafts.
+# Project mods build against LocalExile's main, or the ref in the repository variable LOCALEXILE_REF (a release tag).
+
+on:
+  push:
+    tags: ['*-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: LocalExile-Mods
+      - uses: actions/checkout@v4
+        with:
+          repository: LocalExile/LocalExile
+          ref: ${{ vars.LOCALEXILE_REF || 'main' }}
+          path: LocalExile
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build the zip
+        shell: pwsh
+        run: ./LocalExile-Mods/tools/build-release.ps1 -Tag "$env:GITHUB_REF_NAME" -LocalExileRoot LocalExile -OutFolder out
+      - name: Draft the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          id="${TAG%-v*}"; version="${TAG##*-v}"
+          name="$(jq -r .name "LocalExile-Mods/mods/$id/mod.json")"
+          gh release create "$TAG" "out/$id-$version.zip" --repo "$GITHUB_REPOSITORY" --draft \
+            --title "$name $version" --notes-file "out/$id-$version.md"
