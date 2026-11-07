@@ -13,17 +13,29 @@ Official mods for [LocalExile](https://github.com/LocalExile/LocalExile), the lo
 **3.29.3b** client. Every mod here is maintained with the project, and contributors and new contributors are welcome to
 add their own or improve one by pull request.
 
-A mod is a folder of C# scripts (`.cs` files) with a `mod.json`. The LocalExile Gateway compiles it when it loads, so
-there is nothing to build: copy the folder in and play.
+A mod is a folder with a `mod.json` and either C# scripts (`.cs` files), which the LocalExile Gateway compiles when it
+loads them, or a C# project, whose built `.dll` is published in the mod's releases.
 
 ## To install a mod
-1. Copy `mods/<id>/` from this repository into the `Mods/Binaries/` folder of your LocalExile (the extracted release, or
-   a checkout), so it becomes `Mods/Binaries/<id>/`.
+Use **Waypoint**, LocalExile's launcher. Its Mods section installs, loads and compiles mods: from this repository, by
+cloning any git repository, from a mod folder on your disk, or by downloading a mod's release from GitHub.
+Mods are not only here: anyone can keep mods in their own repository and publish their own releases, and Waypoint installs
+them the same way.
+
+By hand, without Waypoint:
+1. Put the mod's folder into the `Mods/Binaries/` folder of your LocalExile (the extracted release, or a checkout), so it
+   becomes `Mods/Binaries/<id>/`. For a script mod that is `mods/<id>/` from this repository; for a project mod, the
+   contents of its release zip.
 2. Start the game as usual with `LocalExile.exe` (or `live.ps1` in a checkout). A Gateway that is already running loads the
    mod by itself within a second.
 3. In game, `/mod` lists the mods and why any did not load; `/mod_enable <id>` and `/mod_disable <id>` turn one on or off.
 
-Each mod's own `README.md` says what it does, its chat commands and its settings.
+Each mod's own `README.md` says what it does, its chat commands, its settings and the LocalExile versions it works with.
+
+## Releases
+Each mod is released on its own, from the tag `<id>-v<version>` (for example `bossloot-v1.2.0`), with the asset
+`<id>-<version>.zip`: the folder that goes into `Mods/Binaries/<id>/`. The release notes say which LocalExile versions it
+works with. The maintainers publish the releases of the mods in this repository.
 
 ## Mods
 

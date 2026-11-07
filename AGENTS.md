@@ -8,25 +8,39 @@ and running LocalExile itself is in its [AGENTS.md](https://github.com/LocalExil
 
 ## A mod
 
-Every mod is a folder of scripts under `mods/`, named by its id (lower case):
+Every mod is a folder under `mods/`, named by its id (lower case):
 
 ```
 mods/<id>/
   mod.json       { "id": "<id>", "version": "1.0.0", "depends": [] }
-  README.md      what it does, its chat commands, its settings
+  README.md      what it does, its chat commands, its settings, the LocalExile versions it works with
   settings.json  only when it has something to tune
-  *.cs           the scripts
+  *.cs           a script mod's scripts, or
+  <Name>.csproj  a project mod, with its sources
 ```
 
 - `mod.json` and `README.md` are required. `id` is the folder's name; bump `version` in every change to the mod.
-- Scripts only: no `.csproj`, no `.dll` and no other binaries. The Gateway compiles the folder's `.cs` files when it
-  loads it, against `GameServer.Modding` and the mods in `depends`; the server's own code is not visible to a script.
+- A **script mod** is loose `.cs` files: the Gateway compiles them when it loads the folder, against
+  `GameServer.Modding` and the mods in `depends`. The server's own code is not visible to a script.
+- A **project mod** is a C# project that builds against `GameServer.Modding` only. Its `.dll` reaches players through
+  the mod's releases: never commit a `.dll`, `bin/`, `obj/` or any other binary.
 - A mod lists in its README the chat commands it adds; a command name is not taken by another mod here.
 - Add the mod to the table in [README.md](README.md) in the same pull request.
 
+## Releases
+
+Waypoint, LocalExile's launcher, is the hub that installs mods: it clones a git repository, takes a mod folder from disk,
+loads and compiles it, or downloads a mod's GitHub release.
+
+- Each mod is released on its own: tag `<id>-v<version>`, matching `version` in its `mod.json`, with the asset
+  `<id>-<version>.zip` holding exactly what goes into `Mods/Binaries/<id>/` (`mod.json`, `settings.json`, the scripts or
+  the built `.dll`, its other files). The release notes say which LocalExile versions it works with.
+- The maintainers publish the releases of this repository. Never create a tag or a release here yourself.
+
 ## Testing
 
-Copy (or link) the folder to `Mods/Binaries/<id>/` in a LocalExile checkout and play it with the real client. Saving a
+Install the mod into a LocalExile checkout with Waypoint (from its folder), or copy a script mod's folder, or a project
+mod's build output with its `mod.json`, to `Mods/Binaries/<id>/`. Play it with the real client. A new build or a saved
 script reloads the mod while the player stays in game; the chat and the Gateway's log (`[mods]`) say whether it loaded.
 
 - **Start the client only through LocalExile's `scripts/dev/live.ps1`** (or `LocalExile.exe` in a release). Any other
