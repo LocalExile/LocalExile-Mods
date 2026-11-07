@@ -1,5 +1,8 @@
 {
   "id": "fastcampaign",
+  "name": "Fast Campaign",
+  "description": "A faster campaign: 5x kill experience, +50% movement speed, and /fast lists the commands that skip ahead.",
+  "author": "LocalExile",
   "version": "1.0.0",
   "kind": "feature",
   "depends": [],

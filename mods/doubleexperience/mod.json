@@ -1,5 +1,8 @@
 {
   "id": "doubleexperience",
+  "name": "Double Experience",
+  "description": "Twice the experience from kills.",
+  "author": "LocalExile",
   "version": "1.0.0",
   "kind": "feature",
   "depends": [],

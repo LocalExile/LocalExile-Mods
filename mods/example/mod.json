@@ -1,5 +1,8 @@
 {
   "id": "example",
+  "name": "Example",
+  "description": "A starting point to copy: /example counts the kills and areas since the mod loaded.",
+  "author": "LocalExile",
   "version": "1.0.0",
   "kind": "feature",
   "depends": [],

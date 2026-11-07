@@ -1,5 +1,8 @@
 {
   "id": "itemquantity",
+  "name": "Item Quantity",
+  "description": "10 times as many item drops from every kill.",
+  "author": "LocalExile",
   "version": "1.0.0",
   "kind": "feature",
   "depends": [],
