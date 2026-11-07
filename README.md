@@ -41,7 +41,13 @@ works with. The maintainers publish the releases of the mods in this repository.
 
 | Mod | What it does |
 |---|---|
-| | *None yet: be the first.* |
+| [bossloot](mods/bossloot/) | an extra item from every monster of a rarity: an Exalted Orb from every unique monster by default |
+| [doubleexperience](mods/doubleexperience/) | twice the experience from kills |
+| [example](mods/example/) | a starting point to copy: `/example` counts kills and areas |
+| [fastcampaign](mods/fastcampaign/) | a faster campaign: 5× kill experience, +50% movement speed, `/fast` lists the commands that skip ahead |
+| [hello](mods/hello/) | the smallest mod: `/hello [name]` |
+| [itemquantity](mods/itemquantity/) | 10× as many item drops |
+| [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to

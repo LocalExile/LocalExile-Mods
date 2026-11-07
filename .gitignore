@@ -1,0 +1,6 @@
+# Built mods reach players through releases, never through the repository (AGENTS.md).
+bin/
+obj/
+*.dll
+*.pdb
+*.zip

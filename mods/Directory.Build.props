@@ -1,0 +1,27 @@
+<Project>
+  <!-- A project mod: mods/<id>/<Name>.csproj builds into a LocalExile checkout's Mods/Binaries/<id>/ as <id>.dll beside its
+       mod.json and settings.json, where a running Gateway reloads it (LocalExile's Agents/docs/dev/modding.md).
+       LocalExileRoot is that checkout: by default LocalExile/ beside this repository; pass -p:LocalExileRoot=<path> for another. -->
+  <PropertyGroup>
+    <LocalExileRoot Condition="'$(LocalExileRoot)' == ''">$(MSBuildThisFileDirectory)..\..\LocalExile\</LocalExileRoot>
+    <LocalExileRoot>$([MSBuild]::EnsureTrailingSlash('$(LocalExileRoot)'))</LocalExileRoot>
+    <ModId>$(MSBuildProjectName.ToLowerInvariant())</ModId>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>$(ModId)</AssemblyName>
+    <OutputPath>$(LocalExileRoot)Mods\Binaries\$(ModId)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compiled against, not copied: every mod uses the Gateway's own GameServer.Modding. -->
+    <ProjectReference Include="$(LocalExileRoot)src\GameServer.Modding\GameServer.Modding.csproj" Private="false" />
+    <None Include="mod.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="settings.json" Condition="Exists('settings.json')" CopyToOutputDirectory="PreserveNewest" />
+    <None Remove="README.md" />
+  </ItemGroup>
+</Project>
