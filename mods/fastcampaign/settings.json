@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "settings": {
+    "experience": {
+      "type": "integer", "default": 5, "min": 1, "max": 100, "format": "multiplier",
+      "label": "Kill experience", "description": "How many times the experience every kill gives (/fast_xp)."
+    },
+    "speed": {
+      "type": "integer", "default": 50, "min": 0, "max": 300, "unit": "%", "applies": "nextArea",
+      "label": "Movement speed", "description": "Extra movement speed (/fast_speed)."
+    },
+    "language": {
+      "type": "choice", "default": "en",
+      "options": [
+        { "value": "en", "label": "English" },
+        { "value": "zh-Hans", "label": "Simplified Chinese" },
+        { "value": "zh-Hant", "label": "Traditional Chinese" }
+      ],
+      "label": "Language", "description": "The language of /fast and the mod's chat lines (/fast_lang)."
+    }
+  }
+}

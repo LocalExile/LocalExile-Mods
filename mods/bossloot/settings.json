@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "settings": {
+    "item": {
+      "type": "choice", "default": "Exalted Orb", "source": "item",
+      "label": "Item", "description": "The extra item every monster of the chosen rarities drops."
+    },
+    "rarities": {
+      "type": "choices", "default": ["unique"], "minItems": 1,
+      "options": [
+        { "value": "normal", "label": "Normal" },
+        { "value": "magic", "label": "Magic" },
+        { "value": "rare", "label": "Rare" },
+        { "value": "unique", "label": "Unique" }
+      ],
+      "label": "Monster rarities", "description": "The rarities of the monsters that drop the item."
+    }
+  }
+}
