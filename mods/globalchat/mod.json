@@ -1,0 +1,9 @@
+{
+  "id": "globalchat",
+  "name": "Global Chat",
+  "description": "Talk to other LocalExile players: global, trade and whisper chat go through the LocalExile global chat server.",
+  "author": "LocalExile",
+  "version": "1.0.0",
+  "kind": "feature",
+  "depends": []
+}

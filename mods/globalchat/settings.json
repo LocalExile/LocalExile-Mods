@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "settings": {
+    "host": {
+      "type": "text", "default": "localexile-chat.duckdns.org", "minLength": 1,
+      "label": "Address",
+      "description": "The IP or host name of the chat server."
+    },
+    "port": {
+      "type": "integer", "default": 6113, "min": 1, "max": 65535,
+      "label": "Port",
+      "description": "The port of the chat server."
+    }
+  }
+}
