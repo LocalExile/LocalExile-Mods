@@ -1,5 +1,8 @@
 {
   "id": "hello",
+  "name": "Hello",
+  "description": "The smallest mod: /hello [name] answers with the character's details.",
+  "author": "LocalExile",
   "version": "1.0.0",
   "kind": "feature",
   "depends": [],

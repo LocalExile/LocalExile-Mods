@@ -1,5 +1,8 @@
 {
   "id": "bossloot",
+  "name": "Boss Loot",
+  "description": "An extra item from every monster of the chosen rarities: an Exalted Orb from every unique monster by default.",
+  "author": "LocalExile",
   "version": "1.0.0",
   "kind": "feature",
   "depends": [],

@@ -12,25 +12,30 @@ Every mod is a folder under `mods/`, named by its id (lower case):
 
 ```
 mods/<id>/
-  mod.json       { "id": "<id>", "version": "1.0.0", "depends": [] }
+  mod.json       { "id": "<id>", "name": "…", "description": "…", "author": "…", "version": "1.0.0", "depends": [] }
   README.md      what it does, its chat commands, its settings, the LocalExile versions it works with
   settings.json  only when it has something to tune
   *.cs           a script mod's scripts, or
   <Name>.csproj  a project mod, with its sources
 ```
 
-- `mod.json` and `README.md` are required. `id` is the folder's name; bump `version` in every change to the mod.
+- `mod.json` and `README.md` are required. `id` is the folder's name; bump `version` (`<major>.<minor>.<patch>`) in
+  every change to the mod. `name`, `description` (one sentence) and `author` are what Waypoint shows; the Gateway
+  ignores them.
 - A **script mod** is loose `.cs` files: the Gateway compiles them when it loads the folder, against
   `GameServer.Modding` and the mods in `depends`. The server's own code is not visible to a script.
 - A **project mod** is a C# project that builds against `GameServer.Modding` only. Its `.dll` reaches players through
   the mod's releases: never commit a `.dll`, `bin/`, `obj/` or any other binary.
 - A mod lists in its README the chat commands it adds; a command name is not taken by another mod here.
 - Add the mod to the table in [README.md](README.md) in the same pull request.
+- **Run `tools/build-index.ps1` and commit `mods.json`** with every change to a mod: it is the index Waypoint's Browse
+  panel reads, and the pull request check fails when it is out of date. The script also checks the rules above.
 
 ## Releases
 
-Waypoint, LocalExile's launcher, is the hub that installs mods: it clones a git repository, takes a mod folder from disk,
-loads and compiles it, or downloads a mod's GitHub release.
+Waypoint, LocalExile's launcher, is the hub that installs mods. Its Browse panel lists a repository's mods from its
+`mods.json` (this one, and any other repository with the same layout and index), installs a mod from its release, or,
+without one, from its source. It also installs a mod folder from disk.
 
 - Each mod is released on its own: tag `<id>-v<version>`, matching `version` in its `mod.json`, with the asset
   `<id>-<version>.zip` holding exactly what goes into `Mods/Binaries/<id>/` (`mod.json`, `settings.json`, the scripts or

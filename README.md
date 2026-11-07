@@ -17,10 +17,10 @@ A mod is a folder with a `mod.json` and either C# scripts (`.cs` files), which t
 loads them, or a C# project, whose built `.dll` is published in the mod's releases.
 
 ## To install a mod
-Use **Waypoint**, LocalExile's launcher. Its Mods section installs, loads and compiles mods: from this repository, by
-cloning any git repository, from a mod folder on your disk, or by downloading a mod's release from GitHub.
-Mods are not only here: anyone can keep mods in their own repository and publish their own releases, and Waypoint installs
-them the same way.
+Use **Waypoint**, LocalExile's launcher. Its Browse panel lists this repository's mods and installs one with a click:
+from its release, or from its source when it has none. Its Mods panel turns them on and off and edits their settings.
+Mods are not only here: anyone can keep mods in their own repository with the same layout and a `mods.json` index, publish
+their own releases, and add it to Waypoint's Browse panel by its URL. Waypoint also installs a mod folder from your disk.
 
 By hand, without Waypoint:
 1. Put the mod's folder into the `Mods/Binaries/` folder of your LocalExile (the extracted release, or a checkout), so it

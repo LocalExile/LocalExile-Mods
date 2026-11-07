@@ -1,5 +1,8 @@
 {
   "id": "itemrarity",
+  "name": "Item Rarity",
+  "description": "10 times the chance of magic, rare and unique equipment.",
+  "author": "LocalExile",
   "version": "1.0.0",
   "kind": "feature",
   "depends": [],
