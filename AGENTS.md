@@ -40,6 +40,9 @@ without one, from its source. It also installs a mod folder from disk.
 - Each mod is released on its own: tag `<id>-v<version>`, matching `version` in its `mod.json`, with the asset
   `<id>-<version>.zip` holding exactly what goes into `Mods/Binaries/<id>/` (`mod.json`, `settings.json`, the scripts or
   the built `.dll`, its other files). The release notes say which LocalExile versions it works with.
+- A maintainer pushes the tag; the `Mod release` workflow builds the zip with `tools/build-release.ps1` against
+  LocalExile's `main` (or the ref in the repository variable `LOCALEXILE_REF`) and makes a draft release, which the
+  maintainer publishes after trying it in game. `tools/build-release.ps1 <id>` builds the same zip into `out/`.
 - The maintainers publish the releases of this repository. Never create a tag or a release here yourself.
 
 ## Testing
