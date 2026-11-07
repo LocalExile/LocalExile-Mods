@@ -1,2 +1,49 @@
+# Important Notice
+LocalExile is not an official Grinding Gear Games product, and it is not affiliated with or endorsed by Path of Exile or
+Grinding Gear Games. LocalExile does not in any case sponsor nor support illegal public servers. If you use this project
+to run an illegal public server and not for testing and learning it is your own personal choice.
+
+This project is for fun and education only. It is intended for local gameplay with no internet, much like MMO solutions
+(TrinityCore, AzerothCore, MaNGOS).
+
+[Join Discord](https://discord.gg/pd2Fd5M6Hd)
+
 # LocalExile-Mods
-Official Mods for LocalExile project.
+Official mods for [LocalExile](https://github.com/LocalExile/LocalExile), the local server for the Path of Exile
+**3.29.3b** client. Every mod here is maintained with the project, and contributors and new contributors are welcome to
+add their own or improve one by pull request.
+
+A mod is a folder with a `mod.json` and either C# scripts (`.cs` files), which the LocalExile Gateway compiles when it
+loads them, or a C# project, whose built `.dll` is published in the mod's releases.
+
+## To install a mod
+Use **Waypoint**, LocalExile's launcher. Its Mods section installs, loads and compiles mods: from this repository, by
+cloning any git repository, from a mod folder on your disk, or by downloading a mod's release from GitHub.
+Mods are not only here: anyone can keep mods in their own repository and publish their own releases, and Waypoint installs
+them the same way.
+
+By hand, without Waypoint:
+1. Put the mod's folder into the `Mods/Binaries/` folder of your LocalExile (the extracted release, or a checkout), so it
+   becomes `Mods/Binaries/<id>/`. For a script mod that is `mods/<id>/` from this repository; for a project mod, the
+   contents of its release zip.
+2. Start the game as usual with `LocalExile.exe` (or `live.ps1` in a checkout). A Gateway that is already running loads the
+   mod by itself within a second.
+3. In game, `/mod` lists the mods and why any did not load; `/mod_enable <id>` and `/mod_disable <id>` turn one on or off.
+
+Each mod's own `README.md` says what it does, its chat commands, its settings and the LocalExile versions it works with.
+
+## Releases
+Each mod is released on its own, from the tag `<id>-v<version>` (for example `bossloot-v1.2.0`), with the asset
+`<id>-<version>.zip`: the folder that goes into `Mods/Binaries/<id>/`. The release notes say which LocalExile versions it
+works with. The maintainers publish the releases of the mods in this repository.
+
+## Mods
+
+| Mod | What it does |
+|---|---|
+| | *None yet: be the first.* |
+
+## Contributing
+People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to
+open a pull request. How mods work (hooks, settings, reloading) is in LocalExile's
+[mod guide](https://github.com/LocalExile/LocalExile/blob/main/Agents/docs/dev/modding.md).
