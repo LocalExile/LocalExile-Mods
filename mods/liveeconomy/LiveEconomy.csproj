@@ -6,6 +6,7 @@
     <!-- A program of its own, not part of the mod. -->
     <Compile Remove="RatesService/**" />
     <None Remove="RatesService/**" />
+    <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
