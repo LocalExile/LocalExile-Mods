@@ -1,3 +1,0 @@
-<Project>
-  <!-- Not a mod: this stops the mods' Directory.Build.props, which would build it into Mods/Binaries/. -->
-</Project>

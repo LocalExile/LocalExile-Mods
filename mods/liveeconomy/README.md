@@ -1,10 +1,10 @@
 # Live Economy
 
-Faustus's Currency Exchange as a live market, at the prices of the official Path of Exile leagues. While this mod is on, the Gateway
-gets new prices once an hour from the LocalExile rates service, so neither the mod nor your game server contacts Path of
-Exile's servers. Turn it off and the exchange keeps the last prices it got, until they are too old to trade at.
+Faustus's Currency Exchange as a live market, at the prices of the official Path of Exile leagues. While this mod is on, it gets new
+prices once an hour from the LocalExile rates server. With no server in its settings, it gets them from GGG itself. Turn it off and the
+exchange keeps the last prices it got, until they are too old to trade at.
 
-If the service cannot be reached, the last prices stay and the Gateway tries again five minutes later.
+If the server cannot be reached, the last prices stay and the mod tries again five minutes later.
 
 ## Settings
 
@@ -21,21 +21,23 @@ If the service cannot be reached, the last prices stay and the Gateway tries aga
 | Gold fee | ×1 | multiplies the gold an order pays |
 | Oldest rates | 7 days | rates older than this are not traded at |
 | Faustus speaks | on | he says a line when an order is placed or filled |
-| Rates service | `http://localexile-chat.duckdns.org:6114/rates.json` | the address of the rates service (advanced) |
+| Server address | `localexile-chat.duckdns.org` | the rates server; empty: this mod gets the rates from GGG itself |
+| Server port | 6114 | its port; 0: the same |
+| History without a server | 168 hours | with no server, how many hours of GGG's digests to keep (advanced) |
 
 The mod writes the current league's name into its own `settings.json`, for the label "Current league (Allflame)" in an editor.
 
-Anyone can run a rates service and put its address here.
+## Without a server
 
-## The rates service
+With the address empty, the mod reads GGG's public digest (`https://web.poecdn.com/api/currency-exchange/<hour>`) from your machine: about 150 MB and 4 minutes the
+first time, then about 1 MB an hour. It keeps them in `data/liveeconomy/`, and the Gateway uses up to about 230 MB more memory while it reads them.
 
-`RatesService/` is a program of its own, which runs on one server for everyone. It is not in the mod's release, and no Gateway loads it. Once an hour it reads
-GGG's public digest (`https://web.poecdn.com/api/currency-exchange/<hour>`) and serves the prices at `/rates.json`, so players' machines never contact GGG.
+## Running a rates server
 
-It builds against LocalExile's `GameServer.Core`, from a checkout beside this repository or with `-p:LocalExileRoot=<path>`:
+The same dll is the server, on a machine with .NET and no Gateway. It reads GGG's digests once an hour and serves the prices at `/rates.json`, so its users never contact GGG:
 
 ```
-dotnet publish mods/liveeconomy/RatesService -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=none
+dotnet liveeconomy.dll --serve
 ```
 
 `Game_RATES_PORT` (default 6114), `Game_RATES_FOLDER` (default `rates-data`), `Game_RATES_HOURS` (default 168). With `--once <file>` it writes the file and exits.
@@ -46,4 +48,4 @@ None. LocalExile's `/exchange` opens the window.
 
 ## LocalExile versions
 
-Needs a LocalExile with the Currency Exchange module (`UseExchangeRates`).
+Needs a LocalExile with the Currency Exchange module (`UseExchangeOptions`, `PublishExchangeRates`).
