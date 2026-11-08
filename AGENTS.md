@@ -12,7 +12,8 @@ Every mod is a folder under `mods/`, named by its id (lower case):
 
 ```
 mods/<id>/
-  mod.json       { "id": "<id>", "name": "…", "description": "…", "author": "…", "version": "1.0.0", "depends": [] }
+  mod.json       { "id": "<id>", "name": "…", "description": "…", "author": "…", "version": "1.0.0",
+                 "compatibleClientVersions": ["0.2.0-beta"], "depends": [] }
   README.md      what it does, its chat commands, its settings, the LocalExile versions it works with
   settings.json  only when it has something to tune
   *.cs           a script mod's scripts, or
@@ -22,6 +23,10 @@ mods/<id>/
 - `mod.json` and `README.md` are required. `id` is the folder's name; bump `version` (`<major>.<minor>.<patch>`) in
   every change to the mod. `name`, `description` (one sentence) and `author` are what Waypoint shows; the Gateway
   ignores them.
+- `compatibleClientVersions` lists the LocalExile versions the mod works with (`["0.2.0-beta"]`; at least one, each a
+  LocalExile release version without the `v`). Waypoint shows them in My Mods and Browse, marks a mod whose list does not
+  hold the player's LocalExile version, and asks before installing or building it. Add a version once the mod is checked
+  against it; `tools/build-index.ps1` refuses a mod without the field.
 - A **script mod** is loose `.cs` files: the Gateway compiles them when it loads the folder, against
   `GameServer.Modding` and the mods in `depends`. The server's own code is not visible to a script.
 - A **project mod** is a C# project that builds against `GameServer.Modding` only. Its `.dll` reaches players through

@@ -3,7 +3,8 @@
   "name": "Example",
   "description": "A starting point to copy: /example counts the kills and areas since the mod loaded.",
   "author": "LocalExile",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "compatibleClientVersions": ["0.2.0-beta"],
   "kind": "feature",
   "depends": [],
   "enabled": false

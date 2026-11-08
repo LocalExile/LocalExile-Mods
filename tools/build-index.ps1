@@ -60,6 +60,14 @@ foreach ($folder in $folders) {
     if ($projects.Count -eq 1 -and $projects[0].BaseName.ToLowerInvariant() -cne $id) { $problems.Add("${where}: the project's name in lower case is not the id") }
     if (-not $projects.Count -and -not $scripts.Count) { $problems.Add("${where}: no scripts and no project") }
 
+    $clients = @()
+    $clientsProperty = $manifest.PSObject.Properties | Where-Object { $_.Name -ieq 'compatibleClientVersions' } | Select-Object -First 1
+    if ($clientsProperty -and $clientsProperty.Value) { $clients = @($clientsProperty.Value | ForEach-Object { [string]$_ }) }
+    if (-not $clients.Count) { $problems.Add("${where}/mod.json: compatibleClientVersions names no LocalExile version") }
+    foreach ($client in $clients) {
+        if ($client -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { $problems.Add("${where}/mod.json: compatibleClientVersions holds '$client', not a LocalExile version such as 0.2.0-beta") }
+    }
+
     $depends = @()
     $dependsProperty = $manifest.PSObject.Properties | Where-Object { $_.Name -ieq 'depends' } | Select-Object -First 1
     if ($dependsProperty -and $dependsProperty.Value) { $depends = @($dependsProperty.Value | ForEach-Object { [string]$_ }) }
@@ -70,6 +78,7 @@ foreach ($folder in $folders) {
         description = Quote (Text $manifest 'description' '')
         author      = Quote (Text $manifest 'author' '')
         version     = Quote $version
+        compatibleClientVersions = '[' + (($clients | ForEach-Object { Quote $_ }) -join ', ') + ']'
         kind        = Quote ((Text $manifest 'kind' 'feature').ToLowerInvariant())
         type        = Quote ($(if ($projects.Count) { 'project' } else { 'script' }))
         path        = Quote $where

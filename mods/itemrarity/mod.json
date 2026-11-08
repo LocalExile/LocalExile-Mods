@@ -3,7 +3,8 @@
   "name": "Item Rarity",
   "description": "10 times the chance of magic, rare and unique equipment.",
   "author": "LocalExile",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "compatibleClientVersions": ["0.2.0-beta"],
   "kind": "feature",
   "depends": [],
   "enabled": false
