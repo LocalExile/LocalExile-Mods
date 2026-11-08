@@ -2,4 +2,10 @@
 
   <!-- Faustus's Currency Exchange as a live market (README.md). Everything else is in Directory.Build.props. -->
 
+  <ItemGroup>
+    <!-- A program of its own, not part of the mod. -->
+    <Compile Remove="RatesService/**" />
+    <None Remove="RatesService/**" />
+  </ItemGroup>
+
 </Project>

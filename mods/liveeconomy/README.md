@@ -25,7 +25,20 @@ If the service cannot be reached, the last prices stay and the Gateway tries aga
 
 The mod writes the current league's name into its own `settings.json`, for the label "Current league (Allflame)" in an editor.
 
-Anyone can run a rates service (`src/GameServer.Rates` in LocalExile) and put its address here.
+Anyone can run a rates service and put its address here.
+
+## The rates service
+
+`RatesService/` is a program of its own, which runs on one server for everyone. It is not in the mod's release, and no Gateway loads it. Once an hour it reads
+GGG's public digest (`https://web.poecdn.com/api/currency-exchange/<hour>`) and serves the prices at `/rates.json`, so players' machines never contact GGG.
+
+It builds against LocalExile's `GameServer.Core`, from a checkout beside this repository or with `-p:LocalExileRoot=<path>`:
+
+```
+dotnet publish mods/liveeconomy/RatesService -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -p:DebugType=none
+```
+
+`Game_RATES_PORT` (default 6114), `Game_RATES_FOLDER` (default `rates-data`), `Game_RATES_HOURS` (default 168). With `--once <file>` it writes the file and exits.
 
 ## Chat commands
 
