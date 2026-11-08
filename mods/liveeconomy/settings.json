@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "settings": {
+    "orderSlots": {
+      "type": "integer", "default": 20, "min": 1, "max": 100,
+      "label": "Order slots",
+      "description": "How many orders a player can have at once."
+    },
+    "standardPrices": {
+      "type": "choice", "default": "standard",
+      "options": [
+        { "value": "standard", "label": "Standard" },
+        { "value": "current", "label": "Current league" }
+      ],
+      "label": "Prices in Standard",
+      "description": "The official Path of Exile league whose prices the Standard league here trades at."
+    },
+    "leaguePrices": {
+      "type": "choice", "default": "current",
+      "options": [
+        { "value": "current", "label": "Current league" },
+        { "value": "standard", "label": "Standard" }
+      ],
+      "label": "Prices in other leagues",
+      "description": "The official Path of Exile league whose prices every other league here trades at, Hardcore among them."
+    },
+    "spreadScale": {
+      "type": "number", "default": 1, "min": 0, "max": 5, "step": 0.1, "format": "multiplier",
+      "label": "Spread",
+      "description": "Multiplies how far from the official price Faustus trades: 1% for the busiest items, up to 10% for the rarest. Lower is cheaper; 0 trades at the price itself."
+    },
+    "volumeShare": {
+      "type": "number", "default": 0.1, "min": 0, "max": 1, "step": 0.01, "format": "percent",
+      "label": "Share of the market",
+      "description": "How much of an item's official hourly trade Faustus offers in an hour, and at least one of it on each of 6 steps. 0: no limit, every order fills at once."
+    },
+    "patientRange": {
+      "type": "number", "default": 1, "min": 0, "max": 1, "step": 0.1, "format": "percent",
+      "label": "Patient orders",
+      "description": "How much of the way from the buying price to the selling price an order fills with time. 100%: as a live market, so a player can earn the spread. 50%: only up to the official price, so they cannot. 0: none."
+    },
+    "patientSpeed": {
+      "type": "number", "default": 1, "min": 0.1, "max": 100, "step": 0.1, "format": "multiplier",
+      "label": "Patient order speed",
+      "description": "How much faster such orders fill: by default at most 5 minutes for the busiest items and 12 hours for the rarest."
+    },
+    "catchUpHours": {
+      "type": "integer", "default": 168, "min": 0, "max": 168, "unit": "hours",
+      "label": "Trading while away",
+      "description": "How many hours away an order catches up on when the player returns. 0: only the current hour's price counts."
+    },
+    "goldFee": {
+      "type": "number", "default": 1, "min": 0.1, "max": 10, "step": 0.1, "format": "multiplier",
+      "label": "Gold fee",
+      "description": "Multiplies the gold an order pays."
+    },
+    "maxRateAgeDays": {
+      "type": "number", "default": 7, "min": 1, "max": 365, "unit": "days",
+      "label": "Oldest rates",
+      "description": "Rates older than this are not traded at: the market shows no stock until new ones arrive."
+    },
+    "faustusSpeaks": {
+      "type": "bool", "default": true,
+      "label": "Faustus speaks",
+      "description": "He says a line when an order is placed or filled."
+    },
+    "host": {
+      "type": "text", "default": "localexile-chat.duckdns.org",
+      "label": "Server address",
+      "description": "The IP or host name of the rates server. Empty: this mod gets the rates from GGG itself."
+    },
+    "port": {
+      "type": "integer", "default": 6114, "min": 0, "max": 65535,
+      "label": "Server port",
+      "description": "The port of the rates server. 0: this mod gets the rates from GGG itself."
+    },
+    "directHours": {
+      "type": "integer", "default": 168, "min": 24, "max": 168, "unit": "hours",
+      "label": "History without a server",
+      "description": "With no server, how many hours of GGG's digests to keep: about 1 MB each, read once. Fewer use less disk, memory and time, and price fewer rare items.", "advanced": true
+    }
+  }
+}

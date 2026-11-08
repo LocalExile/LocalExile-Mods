@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Faustus's Currency Exchange as a live market (README.md). Everything else is in Directory.Build.props. -->
+
+  <!-- The Gateway loads it as a mod; run with dotnet and the serve switch (README.md) it is the rates server: no apphost and no second project. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseAppHost>false</UseAppHost>
+    <StartupObject>LiveEconomy.Server</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
