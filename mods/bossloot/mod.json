@@ -3,7 +3,8 @@
   "name": "Boss Loot",
   "description": "An extra item from every monster of the chosen rarities: an Exalted Orb from every unique monster by default.",
   "author": "LocalExile",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "compatibleClientVersions": ["0.2.0-beta"],
   "kind": "feature",
   "depends": [],
   "enabled": false
