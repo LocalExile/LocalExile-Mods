@@ -44,6 +44,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [bossloot](mods/bossloot/) | an extra item from every monster of a rarity: an Exalted Orb from every unique monster by default |
 | [doubleexperience](mods/doubleexperience/) | twice the experience from kills |
 | [example](mods/example/) | a starting point to copy: `/example` counts kills and areas |
+| [liveeconomy](mods/liveeconomy/) | Faustus's Currency Exchange as a live market, at the official Path of Exile leagues' prices |
 | [fastcampaign](mods/fastcampaign/) | a faster campaign: 5× kill experience, +50% movement speed, `/fast` lists the commands that skip ahead |
 | [globalchat](mods/globalchat/) | talk to other LocalExile players through the LocalExile global chat server |
 | [hello](mods/hello/) | the smallest mod: `/hello [name]` |
