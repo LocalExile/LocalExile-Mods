@@ -22,4 +22,4 @@ None.
 
 ## LocalExile versions
 
-Needs a LocalExile with the Chat module (`UseChatServer`).
+LocalExile v0.2.0-beta and v0.2.1-beta. Needs a LocalExile with the Chat module (`UseChatServer`).
