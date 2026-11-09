@@ -3,8 +3,8 @@
   "name": "Item Quantity",
   "description": "10 times as many item drops from every kill.",
   "author": "LocalExile",
-  "version": "1.0.1",
-  "compatibleClientVersions": ["0.2.0-beta"],
+  "version": "1.0.2",
+  "compatibleClientVersions": ["0.2.0-beta", "0.2.1-beta"],
   "kind": "feature",
   "depends": [],
   "enabled": false
