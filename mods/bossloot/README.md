@@ -9,4 +9,4 @@ An extra item from every monster of the chosen rarities: by default an Exalted O
 
 Off by default: `/mod_enable bossloot` in game, or Waypoint's Mods section.
 
-Works with: LocalExile v0.2.0-beta and v0.2.1-beta, and `main` from commit `1f6da7c0` (2026-11-03) on, the first with mod settings; not v0.1.0-beta.
+Works with: LocalExile v0.2.0-beta, v0.2.1-beta and v0.2.2-beta, and `main` from commit `1f6da7c0` (2026-11-03) on, the first with mod settings; not v0.1.0-beta.
