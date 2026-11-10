@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- GM Commands: the development and testing chat commands (README.md). Everything else is in Directory.Build.props. -->
+
+</Project>

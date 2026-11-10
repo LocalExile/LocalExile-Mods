@@ -33,7 +33,7 @@ By hand, without Waypoint:
 Each mod's own `README.md` says what it does, its chat commands, its settings and the LocalExile versions it works with.
 
 ## Releases
-Each mod is released on its own, from the tag `<id>-v<version>` (for example `bossloot-v1.2.0`), with the asset
+Each mod is released on its own, from the tag `<id>-v<version>` (for example `gm-commands-v1.0.0`), with the asset
 `<id>-<version>.zip`: the folder that goes into `Mods/Binaries/<id>/`. The release notes say which LocalExile versions it
 works with. The maintainers publish the releases of the mods in this repository.
 
@@ -41,13 +41,10 @@ works with. The maintainers publish the releases of the mods in this repository.
 
 | Mod | What it does |
 |---|---|
-| [bossloot](mods/bossloot/) | an extra item from every monster of a rarity: an Exalted Orb from every unique monster by default |
-| [doubleexperience](mods/doubleexperience/) | twice the experience from kills |
-| [example](mods/example/) | a starting point to copy: `/example` counts kills and areas |
 | [liveeconomy](mods/liveeconomy/) | Faustus's Currency Exchange as a live market, at the official Path of Exile leagues' prices |
 | [fastcampaign](mods/fastcampaign/) | a faster campaign: 5× kill experience, +50% movement speed, `/fast` lists the commands that skip ahead |
+| [gm-commands](mods/gm-commands/) | the development and testing chat commands: teleport, items, monsters, experience, test hits, protocol probes |
 | [globalchat](mods/globalchat/) | talk to other LocalExile players through the LocalExile global chat server |
-| [hello](mods/hello/) | the smallest mod: `/hello [name]` |
 | [itemquantity](mods/itemquantity/) | 10× as many item drops |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
 

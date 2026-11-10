@@ -1,0 +1,10 @@
+{
+  "id": "gm-commands",
+  "name": "GM Commands",
+  "description": "The development and testing chat commands: teleport, items, monsters, experience, quest flags, test hits and protocol probes.",
+  "author": "LocalExile",
+  "version": "1.0.0",
+  "compatibleClientVersions": ["0.3.0-beta"],
+  "kind": "feature",
+  "depends": ["Game"]
+}
