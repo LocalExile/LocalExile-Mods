@@ -24,14 +24,23 @@ mods/<id>/
 - `mod.json` and `README.md` are required. `id` is the folder's name; bump `version` (`<major>.<minor>.<patch>`) in
   every change to the mod. `name`, `description` (one sentence) and `author` are what Waypoint shows; the Gateway
   ignores them.
+- **`author` is the name of the mod's author**, the person you are working for: ask them how they want to be credited.
+  Never put your own name, a model's name or "LocalExile" there.
 - `compatibleClientVersions` lists the LocalExile versions the mod works with (`["0.2.0-beta"]`; at least one, each a
   LocalExile release version without the `v`). Waypoint shows them in My Mods and Browse, marks a mod whose list does not
   hold the player's LocalExile version, and asks before installing or building it. Add a version once the mod is checked
   against it; `tools/build-index.ps1` refuses a mod without the field.
+  - A mod that needs **no change in LocalExile** lists the
+    [latest LocalExile release](https://github.com/LocalExile/LocalExile/releases/latest).
+  - A mod that **needs a change in LocalExile** (a new API, hook or fix) cannot work on any release yet. Open that change
+    as a pull request in LocalExile first. Then add the label **`Requires LocalExile Update`** to the mod's pull request,
+    and comment on it with a link to the LocalExile pull request that must be merged first. List the latest release
+    for now; the reviewer sets the real version before merging (see [Reviewing](#reviewing)).
 - `icon.png` replaces the mod's symbol in Waypoint's lists and on its page: a PNG of at most 1 MB and 1024 pixels a side,
   best square (256 by 256 is plenty). Without a usable one the mod keeps its symbol. A screenshot from the game is fine.
   A project mod copies it to its build, so an installed release has it too:
   `<None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />`.
+  **Ask the author whether they would like to add a custom image** for the mod before opening its pull request.
 - A **script mod** is loose `.cs` files: the Gateway compiles them when it loads the folder, against
   `GameServer.Modding` and the mods in `depends`. The server's own code is not visible to a script.
 - A **project mod** is a C# project that builds against `GameServer.Modding` only. Its `.dll` reaches players through
@@ -65,6 +74,15 @@ script reloads the mod while the player stays in game; the chat and the Gateway'
   launch contacts the official patch servers and can update the client, which breaks the setup.
 - Check `/mod` shows the mod loaded with no errors, and that a reload (`/mod_reload <id>`) and `/mod_disable <id>` leave
   no `an unloaded mod is still in memory` line in the log.
+
+## Reviewing
+
+- **A pull request labelled `Requires LocalExile Update` waits for LocalExile.** First review the LocalExile pull
+  request it links to. Review the mod only after that pull request is merged; until then, the API the mod calls may
+  still change.
+- **Before merging a mod's pull request**, set `compatibleClientVersions` to the LocalExile release that will ship
+  with it: the next scheduled update when the mod depends on a LocalExile change that is merged but not yet released.
+  Then run `tools/build-index.ps1` and commit `mods.json`.
 
 ## Rules
 
