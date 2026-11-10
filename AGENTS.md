@@ -42,8 +42,11 @@ mods/<id>/
   `<None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />`.
   **Ask the author whether they would like to add a custom image** for the mod before opening its pull request.
 - A **script mod** is loose `.cs` files: the Gateway compiles them when it loads the folder, against
-  `GameServer.Modding` and the mods in `depends`. The server's own code is not visible to a script.
-- A **project mod** is a C# project that builds against `GameServer.Modding` only. Its `.dll` reaches players through
+  `GameServer.Modding`, `GameServer.Core` and the mods in `depends`.
+- A **project mod** is a C# project that builds against `GameServer.Modding` and, as a module does, LocalExile's Gateway,
+  Core and Game module (`mods/Directory.Build.props`); one that uses the game's rules lists `"Game"` in `depends`. A mod
+  that uses only `GameServer.Modding` keeps working while LocalExile changes; one that uses the server is fixed here
+  when what it uses changes. Its `.dll` reaches players through
   the mod's releases: never commit a `.dll`, `bin/`, `obj/` or any other binary but `icon.png`.
 - A mod lists in its README the chat commands it adds; a command name is not taken by another mod here.
 - Add the mod to the table in [README.md](README.md) in the same pull request.

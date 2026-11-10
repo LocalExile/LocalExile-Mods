@@ -6,7 +6,7 @@
   - a project mod: its build output, <id>.dll with mod.json, settings.json and the other files it copies, without the
     server's own assemblies (the Gateway has them) or .pdb files;
   - a script mod: its folder, without README.md.
-  A project mod builds against GameServer.Modding of the LocalExile checkout in -LocalExileRoot (by default LocalExile/
+  A project mod builds against GameServer.Modding, the Gateway, Core and Game of the LocalExile checkout in -LocalExileRoot (by default LocalExile/
   beside this repository); the notes name that checkout's commit. The build goes to out/, never into that checkout's
   Mods/Binaries/, so a running Gateway there is not disturbed.
   -Tag (<id>-v<version>, as the release workflow passes it) fails when the mod's mod.json has another version.
@@ -94,7 +94,7 @@ if ($built -eq 'project') {
     $commit = (& git -C $LocalExileRoot rev-parse HEAD).Trim()
     $describe = (& git -C $LocalExileRoot describe --tags --always 2>$null)
     $lines.Add('')
-    $lines.Add("Built against LocalExile ``$describe`` ([$($commit.Substring(0, 8))](https://github.com/LocalExile/LocalExile/commit/$commit)): it works with that version and later ones until the mod API changes.")
+    $lines.Add("Built against LocalExile ``$describe`` ([$($commit.Substring(0, 8))](https://github.com/LocalExile/LocalExile/commit/$commit)): it works with that version and later ones until what it uses changes.")
 }
 $notes = Join-Path $OutFolder "$name.md"
 [System.IO.File]::WriteAllText($notes, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding $false))
