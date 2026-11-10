@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "settings": {
+    "enabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Pickup enabled",
+      "description": "Default for characters without a saved profile."
+    },
+    "gold": {
+      "type": "bool",
+      "default": true,
+      "label": "Pet gold pickup"
+    },
+    "range": {
+      "type": "integer",
+      "default": 60,
+      "min": 5,
+      "max": 80,
+      "label": "Pickup radius",
+      "unit": "cells"
+    },
+    "commonCurrency": {
+      "type": "bool",
+      "default": true,
+      "label": "Common currency preset",
+      "description": "Only the 20 currencies listed in the README; explicit rules override it."
+    },
+    "rules": {
+      "type": "map",
+      "default": {},
+      "label": "Item overrides",
+      "description": "Exact item name or metadata id: 0 blocks, 1-65535 is the minimum ground stack.",
+      "value": {
+        "type": "integer",
+        "min": 0,
+        "max": 65535
+      }
+    },
+    "profiles": {
+      "type": "map",
+      "default": {},
+      "label": "Character profiles",
+      "advanced": true,
+      "value": {
+        "type": "group",
+        "settings": {
+          "enabled": {
+            "type": "bool",
+            "default": true,
+            "label": "Pickup enabled",
+            "description": "Default for characters without a saved profile."
+          },
+          "gold": {
+            "type": "bool",
+            "default": true,
+            "label": "Pet gold pickup"
+          },
+          "range": {
+            "type": "integer",
+            "default": 60,
+            "min": 5,
+            "max": 80,
+            "label": "Pickup radius",
+            "unit": "cells"
+          },
+          "commonCurrency": {
+            "type": "bool",
+            "default": true,
+            "label": "Common currency preset",
+            "description": "Only the 20 currencies listed in the README; explicit rules override it."
+          },
+          "rules": {
+            "type": "map",
+            "default": {},
+            "label": "Item overrides",
+            "description": "Exact item name or metadata id: 0 blocks, 1-65535 is the minimum ground stack.",
+            "value": {
+              "type": "integer",
+              "min": 0,
+              "max": 65535
+            }
+          }
+        }
+      }
+    }
+  }
+}
