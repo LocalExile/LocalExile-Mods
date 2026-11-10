@@ -14,6 +14,9 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>$(ModId)</AssemblyName>
     <OutputPath>$(LocalExileDir)Mods\Binaries\$(ModId)\</OutputPath>
+    <!-- tools/build-release.ps1 builds elsewhere. Not OutputPath on the command line: that is global, so LocalExile's
+         projects would build into the same folder, and the zip would carry their assemblies. -->
+    <OutputPath Condition="'$(ModReleaseOutput)' != ''">$(ModReleaseOutput)</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateDependencyFile>false</GenerateDependencyFile>
   </PropertyGroup>
