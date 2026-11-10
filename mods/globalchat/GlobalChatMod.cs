@@ -11,6 +11,6 @@ public sealed class GlobalChatMod : IMod
     public void Load(IModContext mod)
     {
         var server = mod.Settings<Choices>();
-        mod.UseChatServer(server.Host, server.Port);
+        ChatRoutes.Use(mod.Manifest.Id, server.Host, server.Port);
     }
 }

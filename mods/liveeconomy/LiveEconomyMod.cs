@@ -26,7 +26,7 @@ public sealed class LiveEconomyMod : IMod, IDisposable
     public void Load(IModContext mod)
     {
         var c = mod.Settings<Choices>();
-        mod.UseExchangeOptions(new(League(c.StandardPrices), League(c.LeaguePrices), c.OrderSlots, c.SpreadScale, c.VolumeShare, c.PatientRange,
+        ExchangeRateStore.Use(mod.Manifest.Id, new ExchangeOptions(League(c.StandardPrices), League(c.LeaguePrices), c.OrderSlots, c.SpreadScale, c.VolumeShare, c.PatientRange,
             c.PatientSpeed, c.CatchUpHours, c.GoldFee, c.MaxRateAgeDays, c.FaustusSpeaks));
         string host = c.Host.Trim();
         var token = _stop.Token;
@@ -74,7 +74,7 @@ public sealed class LiveEconomyMod : IMod, IDisposable
                     }
                     if (json is not null && !stop.IsCancellationRequested)
                     {
-                        mod.PublishExchangeRates(json);
+                        ExchangeRateStore.Publish(json);
                         if (RatesBuilder.CurrentOf(json) is { } league) ShowLeague(mod, league);
                     }
                 }
