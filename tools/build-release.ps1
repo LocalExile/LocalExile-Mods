@@ -57,13 +57,17 @@ if ($projects.Count -eq 1) {
     }
     $output = Join-Path $OutFolder "build/$Id"
     if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Recurse -Force }
-    # OutputPath on the command line wins over mods/Directory.Build.props, which builds into the checkout's Mods/Binaries/.
-    & dotnet build $projects[0].FullName -c Release -nologo -v:minimal "-p:LocalExileRoot=$LocalExileRoot" "-p:OutputPath=$output/"
+    # ModReleaseOutput moves only the mod's own output (mods/Directory.Build.props) away from the checkout's Mods/Binaries/;
+    # a global OutputPath would build LocalExile's projects there too.
+    & dotnet build $projects[0].FullName -c Release -nologo -v:minimal "-p:LocalExileRoot=$LocalExileRoot" "-p:ModReleaseOutput=$output/"
     if ($LASTEXITCODE -ne 0) { throw "The build of $Id failed." }
     if (-not (Test-Path -LiteralPath (Join-Path $output "$Id.dll"))) { throw "The build of $Id made no $Id.dll." }
-    # The server's own assemblies are referenced, not shipped: every mod uses the Gateway's.
+    # The server's own assemblies and LocalExile's modules are referenced, not shipped: every mod uses the Gateway's. A
+    # copy of one in the mod's folder would load as a type of its own.
+    $server = @(Get-ChildItem -LiteralPath (Join-Path $LocalExileRoot 'Modules') -Filter 'module.json' -File -Recurse |
+        ForEach-Object { [IO.Path]::GetFileName((Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).assembly) })
     Get-ChildItem -LiteralPath $output -File |
-        Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notlike 'GameServer.*' } |
+        Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notlike 'GameServer.*' -and $_.Name -notin $server } |
         Copy-Item -Destination $stage
     $built = 'project'
 } else {
