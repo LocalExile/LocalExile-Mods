@@ -68,11 +68,11 @@ public sealed class PobMod : IMod, IDisposable
                 throw new InvalidOperationException("Конвертер занят. Повторите команду немного позже.");
             try
             {
-                string character = context.CharacterBuilds.Capture(player);
+                string character = CharacterBuildApi.For(context).Capture(player);
                 await player.Tell("Код принят. Проверяю билд; персонаж пока не изменён...");
                 string text = preparedJson ?? await PobBridge.Convert(args[0], character, sourceFile, context.Lifetime.Stopping);
                 if (player.Closed || !context.Lifetime.IsActive || !request.Matches(generation)) return;
-                var plan = context.CharacterBuilds.Prepare(player, text);
+                var plan = CharacterBuildApi.For(context).Prepare(player, text);
                 if (!request.Stage(generation, plan)) { plan.Dispose(); return; }
                 await player.Tell($"Код PoB валидный. {plan.Summary}\nБудут заменены класс, уровень, дерево, экипировка, камни и джевелы этого персонажа.");
                 foreach (string warning in plan.Warnings.Take(8)) await player.Tell("PoB: " + Short(warning));

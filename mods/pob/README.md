@@ -2,7 +2,7 @@
 
 Optional Path of Building import front end for LocalExile. It is a normal global mod: `IMod`, `mod.json`, host-managed settings and hot reload. It uses the public SDK and Gateway `GameEvents`; it is absent from server modules, league lists and normal server releases.
 
-Requires LocalExile **0.4.1-beta**, including the merged character-build API (#639) and unified GameEvents hooks (#818). Earlier releases are not supported.
+Requires LocalExile main including **#821** (slim loader API), #818 (GameEvents), and #639 (validated imports). The current `0.4.1-beta` catalogue entry is a placeholder: stock 0.4.1-beta predates #821. Set the actual compatible release before merging.
 
 ## Installation and commands
 
