@@ -1,10 +1,24 @@
 # Agent instructions
 
 LocalExile-Mods holds the official mods for [LocalExile](https://github.com/LocalExile/LocalExile), the local server for
-the Path of Exile 3.29.3b client, built by people and AI agents working together.
+the Path of Exile 3.29.3c client, built by people and AI agents working together.
 How mods work (the API, hooks, settings, reloading) is in LocalExile's
 [mod guide](https://github.com/LocalExile/LocalExile/blob/main/Agents/docs/dev/modding.md); read it first. Setting up
 and running LocalExile itself is in its [AGENTS.md](https://github.com/LocalExile/LocalExile/blob/main/AGENTS.md).
+
+## What belongs here
+
+A mod is custom content that each player opts into, for every league. It changes how LocalExile's modules, leagues or
+framework behave, or gives the player tools for development, testing and practice (GM commands, teleports, every MTX
+owned). What is not a mod ([LocalExile's AGENTS.md](https://github.com/LocalExile/LocalExile/blob/main/AGENTS.md),
+"What goes where"):
+
+- **A replica of the real game is never a mod.** A GGG-like server needs zero mods; what GGG's servers do is a module in
+  LocalExile (`Modules/Core/` or `Modules/Legacy/`).
+- **A league never needs a mod.** A system one league builds on is a module in LocalExile (`Modules/Custom/`).
+- **A mod asks LocalExile only for general hooks.** When `GameServer.Modding` lacks something, the LocalExile pull request
+  adds a hook or event any mod could use; the feature's logic, settings and defaults stay here, in the mod. An API shaped
+  for this one mod's feature is the wrong shape.
 
 ## A mod
 
@@ -32,8 +46,8 @@ mods/<id>/
   against it; `tools/build-index.ps1` refuses a mod without the field.
   - A mod that needs **no change in LocalExile** lists the
     [latest LocalExile release](https://github.com/LocalExile/LocalExile/releases/latest).
-  - A mod that **needs a change in LocalExile** (a new API, hook or fix) cannot work on any release yet. Open that change
-    as a pull request in LocalExile first. Then add the label **`Requires LocalExile Update`** to the mod's pull request,
+  - A mod that **needs a change in LocalExile** (a new general hook or a fix: see [What belongs here](#what-belongs-here))
+    cannot work on any release yet. Open that change as a pull request in LocalExile first. Then add the label **`Requires LocalExile Update`** to the mod's pull request,
     and comment on it with a link to the LocalExile pull request that must be merged first. List the latest release
     for now; the reviewer sets the real version before merging (see [Reviewing](#reviewing)).
 - `icon.png` replaces the mod's symbol in Waypoint's lists and on its page: a PNG of at most 1 MB and 1024 pixels a side,
