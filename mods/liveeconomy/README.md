@@ -48,4 +48,4 @@ None. LocalExile's `/exchange` opens the window.
 
 ## LocalExile versions
 
-LocalExile v0.2.1-beta, v0.2.2-beta and v0.3.0-beta. Needs a LocalExile with the Currency Exchange module (`UseExchangeOptions`, `PublishExchangeRates`).
+LocalExile v0.2.1-beta, v0.2.2-beta, v0.3.0-beta and v0.4.0-beta. Needs a LocalExile with the Currency Exchange module (`UseExchangeOptions`, `PublishExchangeRates`).

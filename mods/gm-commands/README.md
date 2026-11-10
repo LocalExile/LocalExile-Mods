@@ -24,5 +24,5 @@ whenever the Game module does.
 LocalExile's own dev scripts (the campaign driver, the level generator's tour loop, `client_control.py`) and Waypoint's
 item crafter send these commands: install this mod for them.
 
-Works with: LocalExile once [LocalExile/LocalExile#815](https://github.com/LocalExile/LocalExile/pull/815) is merged
-(mods reach what modules reach); no release yet.
+Works with: LocalExile v0.4.0-beta and later (the first where mods reach what modules reach, LocalExile/LocalExile#815);
+not v0.3.0-beta or earlier.
