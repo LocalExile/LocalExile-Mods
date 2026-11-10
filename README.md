@@ -45,6 +45,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [fastcampaign](mods/fastcampaign/) | a faster campaign: 5× kill experience, +50% movement speed, `/fast` lists the commands that skip ahead |
 | [gm-commands](mods/gm-commands/) | the development and testing chat commands: teleport, items, monsters, experience, test hits, protocol probes |
 | [globalchat](mods/globalchat/) | talk to other LocalExile players through the LocalExile global chat server |
+| [waypoint-tools](mods/waypoint-tools/) | lets Waypoint's tools reach the game without the client control bridge: the item crafter gives its items through it |
 | [itemquantity](mods/itemquantity/) | 10× as many item drops |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
 

@@ -1,0 +1,10 @@
+{
+  "id": "waypoint-tools",
+  "name": "Waypoint Tools",
+  "description": "Lets Waypoint's tools reach the game without the client control bridge: the item crafter gives its items through it.",
+  "author": "Waypoint",
+  "version": "1.0.0",
+  "compatibleClientVersions": ["0.4.2-beta"],
+  "kind": "feature",
+  "depends": ["Game"]
+}

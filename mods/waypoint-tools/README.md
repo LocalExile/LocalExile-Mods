@@ -1,0 +1,37 @@
+# Waypoint Tools
+
+Lets [Waypoint](https://github.com/LocalExile/Waypoint)'s tools reach the game without the client control bridge, so they
+work on a LocalExile release too. Waypoint's item crafter gives its items through it: no Frida, no Python, and no limit on
+how long the item may be.
+
+It adds no chat command and changes nothing in the game by itself. It does only what Waypoint asks, for a character on
+this server, and says so in that character's chat (`Waypoint: Added Dire Abyss Iron Ring`).
+
+## How Waypoint talks to it
+
+Through files in the LocalExile folder (the extracted release, or a checkout); nothing listens on the network.
+
+- `data/waypoint-tools/loaded.json`: written while the mod is loaded, removed when it unloads.
+  `{"protocol": 1, "version": "1.0.0", "pid": <the Gateway's process id>, "actions": ["item_give"]}`. A file whose
+  `pid` is not a running Gateway was left by one that stopped.
+- `data/waypoint-tools/requests/<id>.json`: a request, one JSON object. Write it as `<id>.tmp` and rename it, so the mod
+  never reads half of it. `<id>` is the caller's (a GUID).
+  `{"action": "item_give", "character": "<name>", "item": <the item>}`. `item` is what `/item_give` takes (LocalExile's
+  [item crafter hook](https://github.com/LocalExile/LocalExile/blob/main/Agents/docs/dev/item-crafter.md)): one object,
+  or an array whose items are given in order.
+- `data/waypoint-tools/replies/<id>.json`: the answer, written before the request is removed.
+  `{"protocol": 1, "id": "<id>", "ok": true, "message": "Added Dire Abyss Iron Ring"}`. The caller reads and deletes it.
+
+A request is carried out on the next tick of that character's connection (about 4 a second while the character is in an
+area and not paused), so it changes the inventory and sends to the client from the connection's own task, as a chat
+command does. One that waits more than 30 seconds for its character is answered `<name> is not in game`; one that cannot be
+read is answered with why. A request left when the mod unloads stays, and the next load reads it.
+
+## Settings
+
+None.
+
+## Works with
+
+LocalExile v0.4.2-beta. It uses the server and the Game module directly, as a module does, and lists `Game` in
+`depends`, so it needs v0.4.0-beta or later (the first where mods reach what modules reach).
