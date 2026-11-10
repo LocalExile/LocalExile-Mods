@@ -3,8 +3,8 @@
   "name": "Live Economy",
   "description": "Faustus's Currency Exchange as a live market: the official Path of Exile leagues' prices, a spread, depth, and orders that fill with time.",
   "author": "JetStream",
-  "version": "1.0.4",
-  "compatibleClientVersions": ["0.2.1-beta", "0.2.2-beta", "0.3.0-beta"],
+  "version": "1.0.5",
+  "compatibleClientVersions": ["0.2.1-beta", "0.2.2-beta", "0.3.0-beta", "0.4.0-beta"],
   "kind": "feature",
   "depends": []
 }
