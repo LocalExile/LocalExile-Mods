@@ -5,7 +5,7 @@
   "author": "nikolos89",
   "version": "1.0.1",
   "compatibleClientVersions": [
-    "0.4.1-beta"
+    "0.4.2-beta"
   ],
   "kind": "feature",
   "depends": [],
