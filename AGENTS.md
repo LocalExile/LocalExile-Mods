@@ -16,9 +16,10 @@ owned). What is not a mod ([LocalExile's AGENTS.md](https://github.com/LocalExil
 - **A replica of the real game is never a mod.** A GGG-like server needs zero mods; what GGG's servers do is a module in
   LocalExile (`Modules/Core/` or `Modules/Legacy/`).
 - **A league never needs a mod.** A system one league builds on is a module in LocalExile (`Modules/Custom/`).
-- **A mod asks LocalExile only for general hooks.** When `GameServer.Modding` lacks something, the LocalExile pull request
-  adds a hook or event any mod could use; the feature's logic, settings and defaults stay here, in the mod. An API shaped
-  for this one mod's feature is the wrong shape.
+- **A mod asks LocalExile only for general hooks.** A mod uses LocalExile's server as a module does (the Gateway, Core
+  and the Game module). When it needs the framework to hand it something new, that LocalExile pull request adds a hook
+  or event any mod could use; the feature's logic, settings and defaults stay here, in the mod. An API shaped for this
+  one mod's feature is the wrong shape.
 
 ## A mod
 
@@ -46,10 +47,11 @@ mods/<id>/
   against it; `tools/build-index.ps1` refuses a mod without the field.
   - A mod that needs **no change in LocalExile** lists the
     [latest LocalExile release](https://github.com/LocalExile/LocalExile/releases/latest).
-  - A mod that **needs a change in LocalExile** (a new general hook or a fix: see [What belongs here](#what-belongs-here))
-    cannot work on any release yet. Open that change as a pull request in LocalExile first. Then add the label **`Requires LocalExile Update`** to the mod's pull request,
-    and comment on it with a link to the LocalExile pull request that must be merged first. List the latest release
-    for now; the reviewer sets the real version before merging (see [Reviewing](#reviewing)).
+  - A mod that **needs a change in LocalExile** (a new general hook or a fix: see
+    [What belongs here](#what-belongs-here)) cannot work on any release yet. Open that change as a pull request in
+    LocalExile first. Then add the label **`Requires LocalExile Update`** to the mod's pull request, and comment on it
+    with a link to the LocalExile pull request that must be merged first. List the latest release for now; the reviewer
+    sets the real version before merging (see [Reviewing](#reviewing)).
 - `icon.png` replaces the mod's symbol in Waypoint's lists and on its page: a PNG of at most 1 MB and 1024 pixels a side,
   best square (256 by 256 is plenty). Without a usable one the mod keeps its symbol. A screenshot from the game is fine.
   A project mod copies it to its build, so an installed release has it too:
