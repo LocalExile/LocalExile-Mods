@@ -19,7 +19,7 @@ public sealed class PobMod : IMod, IDisposable
         {
             var player = Program.PlayerOf(conn);
             if (!requests.TryGetValue(player, out var request) || !request.HasPlan
-                || !TryAnswer(bytes.Span, out bool yes)) return false;
+                || !TryAnswer(bytes.AsSpan(), out bool yes)) return false;
             if (yes) await Confirm(player, request);
             else { request.Cancel(); await player.Tell("Импорт PoB отменён."); }
             return true;

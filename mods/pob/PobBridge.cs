@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 
 sealed class PobSettings
@@ -41,11 +42,14 @@ static class PobBridge
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         try
         {
-            await process.StandardInput.WriteAsync(JsonSerializer.Serialize(new
+            // Framework JSON nodes avoid caching a collectible mod's anonymous request type globally.
+            var input = new JsonObject
             {
-                Version, Code = code, Name = character.RootElement.GetProperty("Name").GetString(), Data = Path.GetFullPath("data"),
-                Record = character.RootElement, SourceFile = sourceFile is null ? null : Path.GetFullPath(sourceFile),
-            }).AsMemory(), timeout.Token);
+                ["Version"] = Version, ["Code"] = code, ["Name"] = character.RootElement.GetProperty("Name").GetString(),
+                ["Data"] = Path.GetFullPath("data"), ["Record"] = JsonNode.Parse(characterJson),
+                ["SourceFile"] = sourceFile is null ? null : Path.GetFullPath(sourceFile),
+            };
+            await process.StandardInput.WriteAsync(input.ToJsonString().AsMemory(), timeout.Token);
             process.StandardInput.Close();
             await process.WaitForExitAsync(timeout.Token);
             string text = await output, errors = await error;
