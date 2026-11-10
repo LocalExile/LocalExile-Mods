@@ -12,6 +12,6 @@ public sealed class ItemRarityMod : IMod
     {
         double multiplier = mod.Settings<Choices>().Multiplier;
         // Multiplied, not set: another mod's rarity stays in.
-        mod.ModifyDrops(drops => drops.Rarity *= multiplier);
+        GameEvents.Drops.Add(mod.Manifest.Id, drops => drops.Rarity *= multiplier);
     }
 }

@@ -11,6 +11,6 @@ public sealed class ItemQuantityMod : IMod
     {
         double multiplier = mod.Settings<Choices>().Multiplier;
         // Multiplied, not set: another mod's quantity stays in.
-        mod.ModifyDrops(drops => drops.Quantity *= multiplier);
+        GameEvents.Drops.Add(mod.Manifest.Id, drops => drops.Quantity *= multiplier);
     }
 }

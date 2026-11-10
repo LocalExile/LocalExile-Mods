@@ -29,45 +29,46 @@ public sealed class FastCampaignMod : IMod
         (_experience, _speed, _language) = (choices.Experience, choices.Speed, Text.Find(choices.Language));
         if (ReadOld(Path.Combine(mod.Folder, OldSettingsFile))) Save();
 
-        mod.ModifyExperience(gain =>
+        string id = mod.Manifest.Id;
+        GameEvents.Experience.Add(id, gain =>
         {
             ulong times = (ulong)Volatile.Read(ref _experience);
             if (times > 1) gain.Experience = (uint)Math.Min(uint.MaxValue, gain.Experience * times);
         });
-        mod.ModifyStats(sheet =>
+        GameEvents.Stats.Add(id, sheet =>
         {
             int speed = Volatile.Read(ref _speed);
             if (speed != 0) sheet.Add(SpeedStat, speed);
         });
 
-        mod.OnChatCommand("fast", "/fast (faster campaign: its settings, and the commands that skip ahead)", command => command.Player.Tell(Help()));
-        mod.OnChatCommand("fast_xp", $"/fast_xp <1-{MaxExperience}> (kill experience multiplier)",
-            command => SetNumber(command, ref _experience, 1, MaxExperience, Text.ExperienceSet));
-        mod.OnChatCommand("fast_speed", $"/fast_speed <0-{MaxSpeed}> (extra movement speed, %)",
-            command => SetNumber(command, ref _speed, 0, MaxSpeed, Text.SpeedSet));
-        mod.OnChatCommand("fast_lang", $"/fast_lang <{string.Join(" | ", Text.Languages)}> (the language of /fast)", SetLanguage);
+        GameEvents.Command(id, "fast", "/fast (faster campaign: its settings, and the commands that skip ahead)", (conn, args) => conn.Commands!.Reply(Help()));
+        GameEvents.Command(id, "fast_xp", $"/fast_xp <1-{MaxExperience}> (kill experience multiplier)",
+            (conn, args) => SetNumber(conn, args, "fast_xp", ref _experience, 1, MaxExperience, Text.ExperienceSet));
+        GameEvents.Command(id, "fast_speed", $"/fast_speed <0-{MaxSpeed}> (extra movement speed, %)",
+            (conn, args) => SetNumber(conn, args, "fast_speed", ref _speed, 0, MaxSpeed, Text.SpeedSet));
+        GameEvents.Command(id, "fast_lang", $"/fast_lang <{string.Join(" | ", Text.Languages)}> (the language of /fast)", SetLanguage);
         mod.Log($"experience x{_experience}, movement speed +{_speed}%, language {Text.Languages[_language]}");
     }
 
     string Help() => string.Format(Text.Help[Volatile.Read(ref _language)], Volatile.Read(ref _experience), Volatile.Read(ref _speed));
 
-    Task SetNumber(ChatCommand command, ref int setting, int min, int max, string[] done)
+    Task SetNumber(ClientState conn, string[] args, string name, ref int setting, int min, int max, string[] done)
     {
         int language = Volatile.Read(ref _language);
-        if (command.Args.Count != 1 || !int.TryParse(command.Args[0], out int value) || value < min || value > max)
-            return command.Player.Tell(string.Format(Text.Usage[language], command.Name, min, max, Volatile.Read(ref setting)));
+        if (args.Length != 1 || !int.TryParse(args[0], out int value) || value < min || value > max)
+            return conn.Commands!.Reply(string.Format(Text.Usage[language], name, min, max, Volatile.Read(ref setting)));
         Volatile.Write(ref setting, value);
         Save();
-        return command.Player.Tell(string.Format(done[language], value));
+        return conn.Commands!.Reply(string.Format(done[language], value));
     }
 
-    Task SetLanguage(ChatCommand command)
+    Task SetLanguage(ClientState conn, string[] args)
     {
-        int language = command.Args.Count == 1 ? Text.Find(command.Args[0]) : -1;
-        if (language < 0) return command.Player.Tell($"/fast_lang <{string.Join(" | ", Text.Languages)}>");
+        int language = args.Length == 1 ? Text.Find(args[0]) : -1;
+        if (language < 0) return conn.Commands!.Reply($"/fast_lang <{string.Join(" | ", Text.Languages)}>");
         Volatile.Write(ref _language, language);
         Save();
-        return command.Player.Tell(Text.LanguageSet[language]);
+        return conn.Commands!.Reply(Text.LanguageSet[language]);
     }
 
     // The user's values; writing them reloads the mod.

@@ -17,4 +17,4 @@ A faster campaign: more experience from kills, extra movement speed, and `/fast`
 
 Off by default: `/mod_enable fastcampaign` in game, or Waypoint's Mods section.
 
-Works with: LocalExile v0.2.0-beta, v0.2.1-beta, v0.2.2-beta, v0.3.0-beta and v0.4.0-beta, and `main` from commit `1f6da7c0` (2026-11-03) on, the first with mod settings; not v0.1.0-beta.
+Works with: LocalExile v0.2.0-beta, v0.2.1-beta, v0.2.2-beta, v0.3.0-beta and v0.4.0-beta, and `main` from commit `1f6da7c0` (2026-11-03) on, the first with mod settings; not v0.1.0-beta. From 1.1.0 it needs the one hook system (LocalExile pull request 818).
