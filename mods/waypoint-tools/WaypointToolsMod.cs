@@ -35,6 +35,18 @@ public sealed class WaypointToolsMod : IMod, IDisposable
     // and reading it again would give the item twice. Under _scanning.
     readonly HashSet<string> _taken = new(StringComparer.OrdinalIgnoreCase);
     readonly Lock _scanning = new();
+    // When each character's connection last ticked (Environment.TickCount64): who is in game, for a request that names nobody.
+    readonly ConcurrentDictionary<string, long> _ticked = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How recently a character's connection must have ticked to count as in game (ticks are about 4 a second).</summary>
+    const long InGameMilliseconds = 2000;
+
+    /// <summary>The characters whose connections ticked within <see cref="InGameMilliseconds"/>.</summary>
+    List<string> InGame()
+    {
+        long now = Environment.TickCount64;
+        return [.. _ticked.Where(t => now - t.Value <= InGameMilliseconds).Select(t => t.Key)];
+    }
     IModContext _mod = null!;
     Timer? _scan;
     bool _disposed;
@@ -81,9 +93,14 @@ public sealed class WaypointToolsMod : IMod, IDisposable
                     if (Read(id, file) is { } request && _taken.Add(id)) _pending[id] = request;
                 }
                 DateTime now = DateTime.UtcNow;
+                var inGame = InGame();
                 foreach (var request in _pending.Values)
-                    if (now - request.Written > Wait && _pending.TryRemove(request.Id, out _))
-                        Answer(request, false, $"{request.Character} is not in game");
+                {
+                    if (request.Character.Length == 0 && inGame.Count > 1 && _pending.TryRemove(request.Id, out _))
+                        Answer(request, false, $"Several characters are in game ({string.Join(", ", inGame)}): name one");
+                    else if (now - request.Written > Wait && _pending.TryRemove(request.Id, out _))
+                        Answer(request, false, request.Character.Length > 0 ? $"{request.Character} is not in game" : "No character is in game");
+                }
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
@@ -110,7 +127,6 @@ public sealed class WaypointToolsMod : IMod, IDisposable
             string action = (string?)json["action"] ?? "";
             string character = (string?)json["character"] ?? "";
             if (action != "item_give") { Answer(refused, false, $"Unknown action \"{action}\""); return null; }
-            if (character.Length == 0) { Answer(refused, false, "Which character?"); return null; }
             if (json["item"] is not { } item || item is not (JsonObject or JsonArray)) { Answer(refused, false, "Which item?"); return null; }
             return new Request(id, file, action, character, item.ToJsonString(), written);
         }
@@ -124,11 +140,15 @@ public sealed class WaypointToolsMod : IMod, IDisposable
     /// <summary>On a connection's own tick: carries out the requests for its character.</summary>
     async Task Tick(ClientState conn)
     {
-        if (_pending.IsEmpty || conn is not { PlayerSent: true, Character: { Length: > 0 } character }) return;
+        if (conn is not { PlayerSent: true, Character: { Length: > 0 } character }) return;
+        _ticked[character] = Environment.TickCount64;
+        if (_pending.IsEmpty) return;
         foreach (var request in _pending.Values)
         {
-            if (!string.Equals(request.Character, character, StringComparison.OrdinalIgnoreCase) || !_pending.TryRemove(request.Id, out _))
-                continue;
+            bool mine = request.Character.Length > 0
+                ? string.Equals(request.Character, character, StringComparison.OrdinalIgnoreCase)
+                : InGame() is [var only] && string.Equals(only, character, StringComparison.OrdinalIgnoreCase);
+            if (!mine || !_pending.TryRemove(request.Id, out _)) continue;
             var (ok, message) = await GiveItems(conn, request.Item);
             Answer(request, ok, message);
             await Send(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, InstanceChat.ChatLine($"Waypoint: {message}"),

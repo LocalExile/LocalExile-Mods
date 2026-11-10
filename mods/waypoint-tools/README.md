@@ -16,7 +16,9 @@ Through files in the LocalExile folder (the extracted release, or a checkout); n
   `pid` is not a running Gateway was left by one that stopped.
 - `data/waypoint-tools/requests/<id>.json`: a request, one JSON object. Write it as `<id>.tmp` and rename it, so the mod
   never reads half of it. `<id>` is the caller's (a GUID).
-  `{"action": "item_give", "character": "<name>", "item": <the item>}`. `item` is what `/item_give` takes (LocalExile's
+  `{"action": "item_give", "character": "<name>", "item": <the item>}`. Without `character` (or with `""`) it goes to
+  the one character in game; with several in game it is answered `Several characters are in game (…): name one`.
+  `item` is what `/item_give` takes (LocalExile's
   [item crafter hook](https://github.com/LocalExile/LocalExile/blob/main/Agents/docs/dev/item-crafter.md)): one object,
   or an array whose items are given in order.
 - `data/waypoint-tools/replies/<id>.json`: the answer, written before the request is removed.
@@ -24,7 +26,8 @@ Through files in the LocalExile folder (the extracted release, or a checkout); n
 
 A request is carried out on the next tick of that character's connection (about 4 a second while the character is in an
 area and not paused), so it changes the inventory and sends to the client from the connection's own task, as a chat
-command does. One that waits more than 30 seconds for its character is answered `<name> is not in game`; one that cannot be
+command does. A character counts as in game while its connection ticked in the last 2 seconds. One that waits more than
+30 seconds for its character is answered `<name> is not in game` (`No character is in game` when it names none); one that cannot be
 read is answered with why. A request left when the mod unloads stays, and the next load reads it.
 
 ## Settings
