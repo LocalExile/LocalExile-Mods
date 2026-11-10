@@ -46,6 +46,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [gm-commands](mods/gm-commands/) | the development and testing chat commands: teleport, items, monsters, experience, test hits, protocol probes |
 | [globalchat](mods/globalchat/) | talk to other LocalExile players through the LocalExile global chat server |
 | [waypoint-tools](mods/waypoint-tools/) | lets Waypoint's tools reach the game without the client control bridge: the item crafter gives its items through it |
+| [backpack](mods/backpack/) | an optional native 20-slot extra backpack for every class, with safe recovery after disable |
 | [itemquantity](mods/itemquantity/) | 10× as many item drops |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
 
