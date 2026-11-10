@@ -156,8 +156,9 @@ public sealed class WaypointToolsMod : IMod, IDisposable
         }
     }
 
-    /// <summary>What gm-commands' /item_give does (LocalExile's Agents/docs/dev/item-crafter.md): one item, or each item of
-    /// a JSON array in order, into the main inventory, until one is refused or does not fit.</summary>
+    /// <summary>Builds each item with the Gateway's own ItemCrafter.Build (the item format of LocalExile's
+    /// Agents/docs/dev/item-crafter.md) and puts it into the main inventory, one object or each item of a JSON array in
+    /// order, until one is refused or does not fit. Self-contained: no other mod is needed.</summary>
     static async Task<(bool Ok, string Message)> GiveItems(ClientState conn, string json)
     {
         if (ItemsFor(conn).Error is { } error) return (false, error);

@@ -18,9 +18,9 @@ Through files in the LocalExile folder (the extracted release, or a checkout); n
   never reads half of it. `<id>` is the caller's (a GUID).
   `{"action": "item_give", "character": "<name>", "item": <the item>}`. Without `character` (or with `""`) it goes to
   the one character in game; with several in game it is answered `Several characters are in game (…): name one`.
-  `item` is what `/item_give` takes (LocalExile's
-  [item crafter hook](https://github.com/LocalExile/LocalExile/blob/main/Agents/docs/dev/item-crafter.md)): one object,
-  or an array whose items are given in order.
+  `item` is an item in the format of LocalExile's
+  [item crafter hook](https://github.com/LocalExile/LocalExile/blob/main/Agents/docs/dev/item-crafter.md), which the
+  mod builds with the Gateway's own `ItemCrafter.Build`: one object, or an array whose items are given in order.
 - `data/waypoint-tools/replies/<id>.json`: the answer, written before the request is removed.
   `{"protocol": 1, "id": "<id>", "ok": true, "message": "Added Dire Abyss Iron Ring"}`. The caller reads and deletes it.
 
@@ -36,5 +36,6 @@ None.
 
 ## Works with
 
-LocalExile v0.4.2-beta. It uses the server and the Game module directly, as a module does, and lists `Game` in
-`depends`, so it needs v0.4.0-beta or later (the first where mods reach what modules reach).
+LocalExile v0.4.2-beta. It needs no other mod: it uses the server and LocalExile's Game module directly, as a module
+does, and lists `Game` (that module, not a mod) in `depends` so it reloads with it. So it needs v0.4.0-beta or later
+(the first where mods reach what modules reach).
