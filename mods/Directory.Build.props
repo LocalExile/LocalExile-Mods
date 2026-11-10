@@ -19,8 +19,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Compiled against, not copied: every mod uses the Gateway's own GameServer.Modding. -->
+    <!-- Compiled against, not copied: every mod uses the Gateway's own GameServer.Modding, and can alter the game as fully as a
+         module (LocalExile's Agents/docs/dev/modding.md): the server itself, the client protocol and shared types, the game's rules. -->
     <ProjectReference Include="$(LocalExileDir)src\GameServer.Modding\GameServer.Modding.csproj" Private="false" />
+    <ProjectReference Include="$(LocalExileDir)src\GameServer.Gateway\GameServer.Gateway.csproj" Private="false" />
+    <ProjectReference Include="$(LocalExileDir)src\GameServer.Core\GameServer.Core.csproj" Private="false" />
+    <ProjectReference Include="$(LocalExileDir)Modules\Core\Game\Game.csproj" Private="false" />
     <None Include="mod.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="settings.json" Condition="Exists('settings.json')" CopyToOutputDirectory="PreserveNewest" />
     <None Remove="README.md" />
