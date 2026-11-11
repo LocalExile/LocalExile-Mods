@@ -1083,8 +1083,7 @@ static class GmCommands
                     throw new ArgumentException("no Descendancy chosen; pass a row name or number, for example /descendancy open 6");
                 string descName = Game.Descendancies.Rows.FirstOrDefault(r => r.Index == descRow)?.Name ?? "?";
                 await conn.Commands!.Reply($"0x7b kind 0x4c row {descRow} ({descName})");
-                await Send(remote, stream, ciphers, InstanceWaypoints.OpenUi(InstanceWaypoints.DescendancySelectUi, descRow),
-                    $"0x007b kind 0x4c row {descRow} (descendancy open)");
+                await Game.OpenDescendancySelector(remote, stream, ciphers, conn, descRow);
                 return;
             }
             if (args[0].Equals("refund", StringComparison.OrdinalIgnoreCase))
@@ -1102,7 +1101,7 @@ static class GmCommands
             }
             if (args[0].Equals("none", StringComparison.OrdinalIgnoreCase))
             {
-                Game.SelectDescendancy(conn, 0);
+                Game.SelectDescendancyForDevelopment(conn, 0);
                 await conn.Commands!.Reply("Descendancy cleared. Reloading the area to show the change.");
                 await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(conn.Layout.Hash, 0, false), "descendancy none");
                 return;
@@ -1119,7 +1118,7 @@ static class GmCommands
                 _ => [],
             };
             if (azmeri.Length > 0) await SetQuestFlags(remote, stream, ciphers, conn, azmeri);
-            Game.SelectDescendancy(conn, row.Index);
+            Game.SelectDescendancyForDevelopment(conn, row.Index);
             await conn.Commands!.Reply($"Descendancy selected - {row.Name} (row {row.Index})" +
                 (azmeri.Length > 0 ? " with its Azmeri flags" : "") + ". Reloading the area to show its tree.");
             await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(conn.Layout.Hash, 0, false), $"descendancy {row.Name}");
