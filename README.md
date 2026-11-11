@@ -48,6 +48,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [waypoint-tools](mods/waypoint-tools/) | lets Waypoint's tools reach the game without the client control bridge: the item crafter gives its items through it |
 | [itemquantity](mods/itemquantity/) | 10× as many item drops |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
+| [forbiddenfreedom](mods/forbiddenfreedom/) | Cross-class matching Forbidden jewel pairs; requires the proposed jewel-grant server API. |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to

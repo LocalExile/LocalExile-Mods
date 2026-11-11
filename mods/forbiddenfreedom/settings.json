@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "settings": {
+    "crossClass": {
+      "type": "bool",
+      "default": true,
+      "label": "Allow other base classes"
+    },
+    "maximumPairs": {
+      "type": "integer",
+      "default": 0,
+      "min": 0,
+      "max": 100,
+      "label": "Maximum distinct pair grants",
+      "description": "Zero allows all distinct matching pairs that fit active sockets."
+    }
+  }
+}

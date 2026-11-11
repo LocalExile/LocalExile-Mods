@@ -1,0 +1,18 @@
+{
+  "id": "forbiddenfreedom",
+  "name": "Forbidden Freedom",
+  "description": "Cross-class matching Forbidden jewel pairs; requires the proposed jewel-grant server API.",
+  "author": "JJ ouyang",
+  "version": "1.1.0",
+  "compatibleClientVersions": [
+    "0.4.2-beta"
+  ],
+  "kind": "feature",
+  "depends": [
+    "Game"
+  ],
+  "enabled": false,
+  "requiredServerApis": [
+    "JewelGrantPolicy.Use"
+  ]
+}
