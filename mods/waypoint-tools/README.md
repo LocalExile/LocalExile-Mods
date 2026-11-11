@@ -36,6 +36,6 @@ None.
 
 ## Works with
 
-LocalExile v0.4.2-beta. It needs no other mod: it uses the server and LocalExile's Game module directly, as a module
+1.0.1: LocalExile v0.4.3-beta and v0.5.0-beta; 1.0.0: v0.4.2-beta. It needs no other mod: it uses the server and LocalExile's Game module directly, as a module
 does, and lists `Game` (that module, not a mod) in `depends` so it reloads with it. So it needs v0.4.0-beta or later
 (the first where mods reach what modules reach).
