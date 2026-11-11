@@ -1,0 +1,18 @@
+{
+  "id": "equipmentfusion",
+  "name": "Equipment Fusion",
+  "description": "Optional donor stats on native skin transfers; requires the proposed equipment-attachment server API.",
+  "author": "JJ ouyang",
+  "version": "1.1.0",
+  "compatibleClientVersions": [
+    "0.4.2-beta"
+  ],
+  "kind": "feature",
+  "depends": [
+    "Game"
+  ],
+  "enabled": false,
+  "requiredServerApis": [
+    "EquipmentAttachmentPolicy.Use"
+  ]
+}
