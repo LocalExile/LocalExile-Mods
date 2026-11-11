@@ -1,0 +1,16 @@
+{
+  "id": "petcurrency",
+  "name": "Pet Currency",
+  "description": "Pet currency pickup into an affinity stash; requires the proposed currency-pickup server API.",
+  "author": "JJ ouyang",
+  "version": "1.1.0",
+  "compatibleClientVersions": [
+    "0.4.2-beta"
+  ],
+  "kind": "feature",
+  "depends": [],
+  "enabled": false,
+  "requiredServerApis": [
+    "CurrencyPickupPolicy.Use"
+  ]
+}
