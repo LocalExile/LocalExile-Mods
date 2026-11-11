@@ -4,7 +4,7 @@
   "description": "The development and testing chat commands: teleport, items, monsters, experience, quest flags, test hits and protocol probes.",
   "author": "LocalExile",
   "version": "1.1.2",
-  "compatibleClientVersions": ["0.4.2-beta"],
+  "compatibleClientVersions": ["0.4.3-beta"],
   "kind": "feature",
   "depends": ["Game"]
 }
