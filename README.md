@@ -49,6 +49,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [itemquantity](mods/itemquantity/) | 10× as many item drops |
 | [pob](mods/pob/) | preview and import character builds through an external converter; requires LocalExile #639 |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
+| [forbiddenfreedom](mods/forbiddenfreedom/) | Cross-class matching Forbidden jewel pairs; requires the proposed jewel-grant server API. |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to
