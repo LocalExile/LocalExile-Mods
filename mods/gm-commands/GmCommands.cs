@@ -1061,6 +1061,69 @@ static class GmCommands
             var error = await ChangePassives(remote, stream, ciphers, conn, conn.MainAscendancy.Allocated.ToArray(), false, "/reset_ascendancy", refundPoints: true);
             await conn.Commands!.Reply(error ?? "Ascendancy passives refunded; you can choose another main ascendancy.");
         })
+        .Add("descendancy", "/descendancy [name|none|open [row|name]|refund <node|all>] (dev: the second ascendancy layer 0x33's spare byte selects: Affliction's Wildwood specialisations and the 3.29 Bloodline classes; open shows the client's Descendancy class selector)", async args =>
+        {
+            if (Game.Descendancies.Rows.Count <= 1) throw new ArgumentException("Descendancy data is missing; run scripts/dev/extract-data.ps1");
+            if (args.Length == 0)
+            {
+                var current = Game.Descendancies.Rows.FirstOrDefault(r => r.Index == conn.DescendancyRow);
+                await conn.Commands!.Reply($"Descendancy - {(current is { Index: > 0 } ? current.Name : "none")}.\n" +
+                    string.Join("\n", Game.Descendancies.Rows.Where(r => r.Index != 0).Select(r => $"/descendancy {r.Id}")));
+                return;
+            }
+            if (args[0].Equals("open", StringComparison.OrdinalIgnoreCase))
+            {
+                // 0x7b kind 0x4c: the client's Descendancy class selector, with the Descendancy.dat row as its first u32.
+                byte descRow = args.Length > 1
+                    ? Game.Descendancies.Find(args[1])?.Index ?? byte.Parse(args[1])
+                    : conn.DescendancyRow;
+                if (args.Length > 1 && Game.Descendancies.Rows.All(r => r.Index != descRow))
+                    throw new ArgumentException("no such Descendancy row");
+                if (descRow == 0)
+                    throw new ArgumentException("no Descendancy chosen; pass a row name or number, for example /descendancy open 6");
+                string descName = Game.Descendancies.Rows.FirstOrDefault(r => r.Index == descRow)?.Name ?? "?";
+                await conn.Commands!.Reply($"0x7b kind 0x4c row {descRow} ({descName})");
+                await Send(remote, stream, ciphers, InstanceWaypoints.OpenUi(InstanceWaypoints.DescendancySelectUi, descRow),
+                    $"0x007b kind 0x4c row {descRow} (descendancy open)");
+                return;
+            }
+            if (args[0].Equals("refund", StringComparison.OrdinalIgnoreCase))
+            {
+                if (conn.DescendancyNodes.Count == 0) { await conn.Commands!.Reply("No descendancy nodes are allocated."); return; }
+                ushort[] nodes = args.Length > 1 && !args[1].Equals("all", StringComparison.OrdinalIgnoreCase)
+                    ? [ushort.Parse(args[1])]
+                    : [.. conn.DescendancyNodes];
+                foreach (ushort n in nodes)
+                    if (!conn.DescendancyNodes.Contains(n)) throw new ArgumentException($"{n} is not an allocated descendancy node");
+                string? refundError = await ChangePassives(remote, stream, ciphers, conn, nodes, allocate: false,
+                    "/descendancy refund", refundPoints: true);
+                await conn.Commands!.Reply(refundError ?? $"Refunded {nodes.Length} descendancy node(s).");
+                return;
+            }
+            if (args[0].Equals("none", StringComparison.OrdinalIgnoreCase))
+            {
+                Game.SelectDescendancy(conn, 0);
+                await conn.Commands!.Reply("Descendancy cleared. Reloading the area to show the change.");
+                await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(conn.Layout.Hash, 0, false), "descendancy none");
+                return;
+            }
+            string name = string.Join(' ', args);
+            var row = Game.Descendancies.Find(name) ?? throw new ArgumentException("choose one Id from /descendancy");
+            // Affliction's Wildwood rows keep their own gate in the client: the Azmeri class flag and the four point flags
+            // unlock the tree and its eight points (the 3.29 Bloodline rows use the 0x33 byte alone).
+            string[] azmeri = row.Index switch
+            {
+                1 => ["AzmeriAreWarden", "WardenPassivePoints1", "WardenPassivePoints2", "WardenPassivePoints3", "WardenPassivePoints4"],
+                2 => ["AzmeriAreVoodooShaman", "ShamanPassivePoints1", "ShamanPassivePoints2", "ShamanPassivePoints3", "ShamanPassivePoints4"],
+                3 => ["AzmeriArePrimalist", "PrimalistPassivePoints1", "PrimalistPassivePoints2", "PrimalistPassivePoints3", "PrimalistPassivePoints4"],
+                _ => [],
+            };
+            if (azmeri.Length > 0) await SetQuestFlags(remote, stream, ciphers, conn, azmeri);
+            Game.SelectDescendancy(conn, row.Index);
+            await conn.Commands!.Reply($"Descendancy selected - {row.Name} (row {row.Index})" +
+                (azmeri.Length > 0 ? " with its Azmeri flags" : "") + ". Reloading the area to show its tree.");
+            await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(conn.Layout.Hash, 0, false), $"descendancy {row.Name}");
+        })
         .Add("gold", "/gold <amount> (dev: add gold, or take it with a negative amount; the account's, saved)", async args =>
         {
             if (args.Length == 0 || !long.TryParse(args[0], out long delta)) throw new ArgumentException("an amount of gold (negative takes gold)");
