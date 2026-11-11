@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "settings": {
+    "radius": {
+      "type": "integer",
+      "default": 12,
+      "min": 0,
+      "max": 64,
+      "label": "Pickup radius",
+      "unit": "cells"
+    },
+    "maximumItemsPerTick": {
+      "type": "integer",
+      "default": 8,
+      "min": 1,
+      "max": 64,
+      "label": "Stacks per pickup pass"
+    },
+    "requirePet": {
+      "type": "bool",
+      "default": true,
+      "label": "Require an equipped pet"
+    }
+  }
+}
