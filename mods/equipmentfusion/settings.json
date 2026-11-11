@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "settings": {
+    "globalModifiers": {
+      "type": "bool",
+      "default": true,
+      "label": "Donor global modifiers"
+    },
+    "localDamage": {
+      "type": "bool",
+      "default": true,
+      "label": "Donor completed damage"
+    },
+    "localDefences": {
+      "type": "bool",
+      "default": true,
+      "label": "Donor local defences and shield block"
+    },
+    "localAccuracy": {
+      "type": "bool",
+      "default": true,
+      "label": "Donor local accuracy"
+    }
+  }
+}
