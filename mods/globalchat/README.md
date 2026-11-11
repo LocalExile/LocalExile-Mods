@@ -22,4 +22,4 @@ None.
 
 ## LocalExile versions
 
-1.1.1 works with LocalExile v0.4.2-beta; 1.1.0 with v0.4.1-beta, the first with the one hook system (`GameEvents`). Its 1.0.x versions work with v0.2.0-beta to v0.4.0-beta. Needs a LocalExile with the Chat module (`ChatRoutes.Use`).
+1.1.2 works with LocalExile v0.4.3-beta and v0.5.0-beta; 1.1.1 with v0.4.2-beta; 1.1.0 with v0.4.1-beta, the first with the one hook system (`GameEvents`). Its 1.0.x versions work with v0.2.0-beta to v0.4.0-beta. Needs a LocalExile with the Chat module (`ChatRoutes.Use`).
