@@ -107,16 +107,14 @@ static class CampaignState
     /// <summary>The waypoints a preset gives (CharacterStartQuestState Areas, WorldAreas Ids: every one has a waypoint).
     /// The demo starts list where they begin (E3StartOfAct7: The Brine King's Reef, where Weylam sails to Act 7;
     /// EpilogueAtlasDemo: Karui Shores), the console starts every waypoint up to their point. Empty for an unknown preset.</summary>
-    public static IReadOnlyList<string> PresetWaypoints(string id, string tables = "data/tables")
+    public static IReadOnlyList<string> PresetWaypoints(string id)
     {
-        string presetsFile = Path.Combine(tables, "CharacterStartQuestState.json"), areasFile = Path.Combine(tables, "WorldAreas.json");
-        if (!ClientTables.Exists(presetsFile) || !ClientTables.Exists(areasFile)) return [];
-        using var areas = JsonDocument.Parse(ClientTables.ReadAllBytes(areasFile));
-        string[] ids = [.. areas.RootElement.EnumerateArray().Select(r => r.TryGetProperty("Id", out var a) ? a.GetString() ?? "" : "")];
-        using var presets = JsonDocument.Parse(ClientTables.ReadAllBytes(presetsFile));
-        var row = presets.RootElement.EnumerateArray().FirstOrDefault(r => string.Equals(r.GetProperty("Id").GetString(), id, StringComparison.OrdinalIgnoreCase));
-        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("Areas", out var list)) return [];
-        return [.. list.EnumerateArray().Select(a => a.GetInt32()).Where(i => i >= 0 && i < ids.Length).Select(i => ids[i])];
+        if (!ClientTables.Has("CharacterStartQuestState") || !ClientTables.Has("WorldAreas")) return [];
+        string[] ids = [.. ClientTables.Table("WorldAreas").Select(r => r.TextOrNull("Id") ?? "")];
+        foreach (var row in ClientTables.Table("CharacterStartQuestState"))
+            if (string.Equals(row.Text("Id"), id, StringComparison.OrdinalIgnoreCase))
+                return row.Has("Areas") ? [.. row.Ints("Areas").Where(i => i >= 0 && i < ids.Length).Select(i => ids[i])] : [];
+        return [];
     }
 
     /// <summary>
@@ -134,7 +132,7 @@ static class CampaignState
         var preset = presets.FirstOrDefault(p => p.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
         if (preset is null)
         {
-            error = presets.Count == 0 ? "No data/tables/CharacterStartQuestState.json (run scripts/dev/extract-data.ps1)."
+            error = presets.Count == 0 ? "No CharacterStartQuestState table in data/client.db (run scripts/dev/extract-data.ps1)."
                 : $"No preset \"{id}\". Presets: {string.Join(", ", presets.Select(p => p.Id))}.";
             return null;
         }
@@ -175,14 +173,11 @@ static class CampaignState
     static Dictionary<string, string[]> AreaTable()
     {
         var gates = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        string areas = Path.Combine("data", "tables", "WorldAreas.json"), flagsFile = Path.Combine("data", "tables", "QuestFlags.json");
-        if (!ClientTables.Exists(areas) || !ClientTables.Exists(flagsFile)) return gates;
-        using var flags = JsonDocument.Parse(ClientTables.ReadAllBytes(flagsFile));
-        string[] names = [.. flags.RootElement.EnumerateArray().Select(r => r.TryGetProperty("Id", out var id) ? id.GetString() ?? "" : "")];
-        string[] Names(JsonElement area, string column) => area.TryGetProperty(column, out var list)
-            ? [.. list.EnumerateArray().Select(e => e.GetInt32()).Where(i => i >= 0 && i < names.Length).Select(i => names[i])] : [];
-        using var doc = JsonDocument.Parse(ClientTables.ReadAllBytes(areas));
-        foreach (var area in doc.RootElement.EnumerateArray())
+        if (!ClientTables.Has("WorldAreas") || !ClientTables.Has("QuestFlags")) return gates;
+        string[] names = [.. ClientTables.Table("QuestFlags").Select(r => r.TextOrNull("Id") ?? "")];
+        string[] Names(ClientRow area, string column) => area.Has(column)
+            ? [.. area.Ints(column).Where(i => i >= 0 && i < names.Length).Select(i => names[i])] : [];
+        foreach (var area in ClientTables.Table("WorldAreas"))
             foreach (string visit in Names(area, "StartQuestFlags").Where(f => f.StartsWith("Visited-", StringComparison.Ordinal)))
                 gates.TryAdd(visit, Names(area, "EndQuestFlags"));
         return gates;
