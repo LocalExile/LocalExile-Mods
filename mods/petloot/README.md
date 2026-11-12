@@ -4,7 +4,7 @@ An opt-in mod: a worn cosmetic pet walks to nearby selected currency and picks i
 enable it with `/mod_enable petloot` or Waypoint. `/petloot off` pauses pickup for this character, including after an
 area change or restart; `/petloot on` resumes it. Removing or disabling the mod leaves normal pets following the player.
 
-Requires the public Gateway ground-item and cosmetic-pet controls in LocalExile PR #737. Use this script with that revision. The manifest lists 0.4.2-beta pending the first release containing those controls. A league without either provider leaves items on the ground.
+Requires LocalExile PR #737 for the game's saved pickup and cosmetic pet walking methods. The manifest lists 0.5.0-beta pending the first release containing that change. Pickup runs in leagues with both Game and Cosmetics.
 
 ## Filters
 
@@ -38,8 +38,5 @@ Waypoint edits the defaults and rules declared in `settings.json`. User changes 
 league and character; another player's choices are unaffected. A character's first command snapshots the current
 defaults. Reset that profile to follow future default changes again. Keep this user's settings file private.
 
-Same-target renewals keep the existing walk without repeated pathfinding or movement packets.
-
-The mod uses the host's player tick and lifetime-owned, expiring pet control; it creates no timers, threads or pickup
-workers. Disable, reload, disconnect and filter changes release control. The server validates the live connection,
-owner, item visibility, range and inventory at pickup. Pets resume following when control expires.
+The mod orders one walk per target. The server checks the pet and the item again when collecting.
+An interrupted or expired walk returns to ordinary pet following.

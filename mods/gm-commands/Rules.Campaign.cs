@@ -78,15 +78,14 @@ static partial class GmCommandsRules
         var list = new List<(string, int)>();
         try
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(ClientTables.ReadAllBytes("data/tables/WorldAreas.json"));
-            foreach (var r in doc.RootElement.EnumerateArray())
+            foreach (var r in ClientTables.Table("WorldAreas"))
             {
-                string id = r.GetProperty("Id").GetString() ?? "";
-                if (System.Text.RegularExpressions.Regex.IsMatch(id, @"^[12]_\d+_") && r.GetProperty("HasWaypoint").GetBoolean())
-                    list.Add((id, r.GetProperty("Act").GetInt32()));
+                string id = r.Text("Id") ?? "";
+                if (System.Text.RegularExpressions.Regex.IsMatch(id, @"^[12]_\d+_") && r.Bool("HasWaypoint"))
+                    list.Add((id, r.Int("Act")));
             }
         }
-        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException or KeyNotFoundException) { }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or KeyNotFoundException) { }
         return list;
     });
 

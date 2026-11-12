@@ -1,4 +1,6 @@
 using System.Runtime.CompilerServices;
+using GameServer.Core.Protocol.Instance;
+using GameServer.Modules.CosmeticsAndPets;
 using GameServer.Modding;
 
 public sealed class PetLootMod : IMod
@@ -35,10 +37,10 @@ public sealed class PetLootMod : IMod
             p => p.Value with { Rules = Normalize(p.Value.Rules) }) };
         GameEvents.Tick.Add(mod.Manifest.Id, Tick);
         GameEvents.Command(mod.Manifest.Id, "petloot", "/petloot [on|off|toggle|list|nearby|gold|common|range|allow|block|remove|reset]", Command);
-        mod.Log("opt-in pet pickup; /petloot for this character's rules. Requires the player-loot API.");
+        mod.Log("opt-in pet pickup; /petloot for this character's rules.");
     }
 
-    static string Key(IPlayer player) => string.Join("|", new[] { player.Account ?? "", player.League, player.Character }
+    static string Key(ClientState conn) => string.Join("|", new[] { conn.Account ?? "", conn.League ?? "Standard", Game.CharacterName(conn) }
         .Select(Uri.EscapeDataString));
 
     static Dictionary<string, int> Normalize(Dictionary<string, int> rules)
@@ -48,79 +50,110 @@ public sealed class PetLootMod : IMod
         return result;
     }
 
-    Profile ProfileOf(IPlayer player)
+    Profile ProfileOf(ClientState conn)
     {
         lock (choicesGate)
-            return choices.Profiles.GetValueOrDefault(Key(player))
+            return choices.Profiles.GetValueOrDefault(Key(conn))
                 ?? new(choices.Enabled, choices.Gold, choices.Range, choices.CommonCurrency, choices.Rules);
     }
 
-    // Specific metadata wins over its display name. Zero excludes it, even from the common-currency preset.
-    public static bool Accept(GroundItem item, Profile profile)
+    sealed record Candidate(uint Id, WorldItemObject Item, ItemCatalog.BaseType Type);
+
+    bool Active(ClientState conn) => mod.Lifetime.IsActive && Game.CurrentGameRules && !conn.Closed
+        && !conn.LeavingArea && !conn.Paused && conn.PlayerSent && conn.PlayerLife > 0 && !conn.RageRetired
+        && Program.ModulesFor(conn).Contains("Game") && Program.ModulesFor(conn).Contains("Cosmetics")
+        && !Game.HardcoreProgressBlocked(conn) && GameEvents.AllowsLoot(conn);
+
+    static bool Visible(ClientState conn, uint id)
     {
-        if (!profile.Enabled || item.PlayerDropped || item.Quest || (!item.Gold && item.MaxStack <= 1)) return false;
-        if (item.Gold && !profile.Gold) return false;
-        int? threshold = null;
-        foreach (var (key, value) in profile.Rules)
-            if (key.Equals(item.Metadata, StringComparison.OrdinalIgnoreCase)) { threshold = value; break; }
-        if (threshold is null)
-            foreach (var (key, value) in profile.Rules)
-                if (key.Equals(item.Name, StringComparison.OrdinalIgnoreCase)) { threshold = value; break; }
-        threshold ??= item.Gold || profile.CommonCurrency && Common.Contains(item.Name) ? 1 : 0;
-        return threshold > 0 && item.StackSize >= threshold;
+        var origin = conn.Instance.Ground.Origin(id);
+        return conn.SeenGround.Contains(id) && (origin.Shared || ReferenceEquals(origin.By, conn));
     }
 
-    void Release(IPlayerPets? pets, RunState state)
+    static Candidate[] Nearby(ClientState conn, Profile profile)
     {
-        if (state.Pet is uint pet) pets?.ReleasePet(pet, mod.Lifetime);
+        lock (conn.Monsters)
+        {
+            var pos = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
+            var items = Game.ItemsFor(conn);
+            var nearby = new List<Candidate>();
+            foreach (var (id, item) in conn.Instance.Ground.Within(pos.X, pos.Y, Math.Clamp(profile.Range, 5, 80), _ => true))
+                if (Visible(conn, id) && items.ByHash(item.Item.TypeHash) is { } type)
+                    nearby.Add(new(id, item, type));
+            return nearby.ToArray();
+        }
+    }
+
+    static bool Accept(Candidate drop, Profile profile)
+    {
+        bool gold = Game.IsGold(drop.Item);
+        if (!profile.Enabled || drop.Item.PlayerDropped || drop.Type.Quest is not null
+            || (gold ? !profile.Gold : drop.Type.MaxStack <= 1)) return false;
+        if (!profile.Rules.TryGetValue(drop.Type.Id, out int minimum)
+            && !profile.Rules.TryGetValue(drop.Type.Name, out minimum))
+            minimum = gold || profile.CommonCurrency && Common.Contains(drop.Type.Name) ? 1 : 0;
+        return minimum > 0 && drop.Item.Item.StackSize >= minimum;
+    }
+
+    async Task Release(ClientState conn, RunState state)
+    {
+        uint? pet = state.Pet;
         state.Item = state.Pet = null;
+        if (pet is uint id && Active(conn))
+            await CosmeticsFeature.WalkPetTo(conn, id, conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds), () => Active(conn));
     }
 
     async Task Tick(ClientState conn, double seconds)
     {
-        var player = Program.PlayerOf(conn);
         var state = states.GetValue(conn, _ => new());
         await state.Gate.WaitAsync();
         try
         {
-            var loot = GameEvents.GroundLootFor(conn);
-            var controls = GameEvents.WornPetsFor(conn);
-            var profile = ProfileOf(player);
-            if (!mod.Lifetime.IsActive || player.Closed || !profile.Enabled || loot is null || controls is null)
-            { Release(controls, state); return; }
+            var profile = ProfileOf(conn);
+            if (!profile.Enabled || !Active(conn)) { await Release(conn, state); return; }
             state.Seconds += Math.Max(0, seconds);
             foreach (uint old in state.RetryAfter.Where(e => e.Value <= state.Seconds).Select(e => e.Key).ToArray())
                 state.RetryAfter.Remove(old);
-            var pets = controls.Nearby;
-            var items = loot.Nearby(profile.Range).Where(i => Accept(i, profile) && !state.RetryAfter.ContainsKey(i.Id)).ToArray();
-            if (pets.Count == 0) { Release(controls, state); return; }
-            var item = items.FirstOrDefault(i => i.Id == state.Item);
-            var pet = pets.FirstOrDefault(p => p.Id == state.Pet);
-            if (state.Item is not null && (item is null || pet is null)) Release(controls, state);
+            var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
+            var candidates = Nearby(conn, profile).Where(i => Accept(i, profile) && !state.RetryAfter.ContainsKey(i.Id));
+            var drop = state.Item is uint target ? candidates.FirstOrDefault(i => i.Id == target)
+                : candidates.MinBy(i => Distance(at.X, at.Y, i.Item.GridX, i.Item.GridY));
+            if (drop is null) { await Release(conn, state); return; }
+            var to = (X: drop.Item.GridX, Y: drop.Item.GridY);
             if (state.Item is null)
             {
-                var at = player.Position;
-                item = items.OrderBy(i => Distance(at.X, at.Y, i.X, i.Y)).FirstOrDefault();
-                if (item is null) return;
-                pet = pets.OrderBy(p => Distance(p.X, p.Y, item.X, item.Y)).First();
-                state.Item = item.Id; state.Pet = pet.Id; state.Started = state.Seconds;
+                double now = conn.Clock.Elapsed.TotalSeconds;
+                lock (conn.Pets)
+                {
+                    if (conn.Pets.Count == 0) return;
+                    state.Pet = conn.Pets.MinBy(p => { var pos = p.Value.Walk.Position(now); return Distance(pos.X, pos.Y, to.X, to.Y); }).Key;
+                }
+                state.Item = drop.Id; state.Started = state.Seconds;
+                if (!await CosmeticsFeature.WalkPetTo(conn, state.Pet.Value, to, () => Active(conn)))
+                { await Release(conn, state); return; }
             }
-            if (item is null || pet is null) return;
-            // Revalidate filters each tick and renew the short, host-owned pet-control lease. No background task survives unload.
-            if (!Accept(item, ProfileOf(player)) || !mod.Lifetime.IsActive
-                || !await controls.MovePet(pet.Id, item.X, item.Y, mod.Lifetime))
-            { Release(controls, state); return; }
-            if (Distance(pet.X, pet.Y, item.X, item.Y) <= 2)
+            Game.GroundPickup? pickup = null;
+            lock (conn.Monsters)
+            lock (conn.Pets)
             {
-                bool picked = await loot.PickUp(item.Id, mod.Lifetime, pet.Id);
-                if (!picked) state.RetryAfter[item.Id] = state.Seconds + 2;
-                Release(controls, state);
+                if (Active(conn) && state.Pet is uint id && conn.Pets.TryGetValue(id, out var pet) && Visible(conn, drop.Id)
+                    && ReferenceEquals(conn.Instance.Ground.Get(drop.Id), drop.Item))
+                {
+                    var current = ProfileOf(conn);
+                    double now = conn.Clock.Elapsed.TotalSeconds;
+                    var owner = conn.Walk.Position(now); var collector = pet.Walk.Position(now);
+                    if (Accept(drop, current) && Distance(owner.X, owner.Y, to.X, to.Y) <= Math.Clamp(current.Range, 5, 80))
+                    {
+                        if (Distance(collector.X, collector.Y, to.X, to.Y) <= 2)
+                            pickup = Game.TakeGroundStack(conn, drop.Id, drop.Item);
+                        else if (state.Seconds - state.Started < 10) return;
+                    }
+                }
             }
-            else if (state.Seconds - state.Started >= 10)
-            {
-                state.RetryAfter[item.Id] = state.Seconds + 2;
-                Release(controls, state); // a blocked walk never turns into a remote pickup
-            }
+            if (pickup is not null)
+                await Game.SendPickup(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, conn, drop.Id, pickup);
+            else state.RetryAfter[drop.Id] = state.Seconds + 2;
+            await Release(conn, state);
         }
         finally { state.Gate.Release(); }
     }
@@ -129,18 +162,13 @@ public sealed class PetLootMod : IMod
 
     async Task Command(ClientState conn, string[] args)
     {
-        var player = Program.PlayerOf(conn);
         var state = states.GetValue(conn, _ => new());
         await state.Gate.WaitAsync();
         try
         {
             if (!mod.Lifetime.IsActive) return;
-            var profile = ProfileOf(player);
+            var profile = ProfileOf(conn);
             string action = args.Length == 0 ? "status" : args[0].ToLowerInvariant();
-            var loot = GameEvents.GroundLootFor(conn);
-            var controls = GameEvents.WornPetsFor(conn);
-            if (loot is null || controls is null)
-            { await conn.Commands!.Reply("Pet Loot needs a LocalExile build with ground-loot and cosmetic-pet controls; no items were picked up."); return; }
             if (action is "status" or "list")
             {
                 string rules = string.Join(", ", profile.Rules.OrderBy(r => r.Key).Select(r => $"{r.Key}: {(r.Value == 0 ? "blocked" : "min " + r.Value)}"));
@@ -151,8 +179,8 @@ public sealed class PetLootMod : IMod
             }
             if (action == "nearby")
             {
-                var nearby = loot.Nearby(profile.Range).Take(12).ToArray();
-                await conn.Commands!.Reply(nearby.Length == 0 ? "No nearby items." : string.Join("\n", nearby.Select(i => $"{i.Name} x{i.StackSize}: {i.Metadata}")));
+                var nearby = Nearby(conn, profile).Take(12).ToArray();
+                await conn.Commands!.Reply(nearby.Length == 0 ? "No nearby items." : string.Join("\n", nearby.Select(i => $"{i.Type.Name} x{i.Item.Item.StackSize}: {i.Type.Id}")));
                 return;
             }
             if (action is "on" or "off" or "toggle")
@@ -176,17 +204,17 @@ public sealed class PetLootMod : IMod
             else if (action != "reset")
             { await conn.Commands!.Reply("Unknown option. /petloot lists commands and current rules."); return; }
 
-            Release(controls, state); // no pending target survives pause or a filter change
+            await Release(conn, state); // no pending target survives pause or a filter change
             lock (choicesGate)
             {
                 var profiles = new Dictionary<string, Profile>(choices.Profiles);
-                if (action == "reset") profiles.Remove(Key(player)); else profiles[Key(player)] = profile;
+                if (action == "reset") profiles.Remove(Key(conn)); else profiles[Key(conn)] = profile;
                 var next = choices with { Profiles = profiles };
                 mod.SaveSettings(next);
                 choices = next;
             }
             await conn.Commands!.Reply(action == "reset" ? "Pet Loot: this character now uses the server defaults."
-                : $"Pet Loot saved for {player.Character}: {(profile.Enabled ? "on" : "paused")}. /petloot list");
+                : $"Pet Loot saved for {Game.CharacterName(conn)}: {(profile.Enabled ? "on" : "paused")}. /petloot list");
         }
         finally { state.Gate.Release(); }
     }
