@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "settings": {
+    "level": {
+      "type": "number", "default": 1.6, "min": 1, "max": 3, "step": 0.1, "format": "multiplier",
+      "label": "Zoom", "description": "How far back the camera stands for players who have not picked their own with /zoom. 1 is the game's own view."
+    },
+    "step": {
+      "type": "number", "default": 0.2, "min": 0.05, "max": 1, "step": 0.05, "advanced": true,
+      "label": "Step", "description": "How much /zoom out and /zoom in change the level."
+    }
+  }
+}
