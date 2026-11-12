@@ -4,7 +4,7 @@ An opt-in mod: a worn cosmetic pet walks to nearby selected currency and picks i
 enable it with `/mod_enable petloot` or Waypoint. `/petloot off` pauses pickup for this character, including after an
 area change or restart; `/petloot on` resumes it. Removing or disabling the mod leaves normal pets following the player.
 
-Requires LocalExile PR #737 for the game's saved pickup and cosmetic pet walking methods. The manifest lists 0.5.0-beta pending the first release containing that change. Pickup runs in leagues with both Game and Cosmetics.
+Requires LocalExile v0.5.1-beta or later, the first release with PR #737: the game's saved pickup and cosmetic pet walking methods. Pickup runs in leagues with both Game and Cosmetics.
 
 ## Filters
 
