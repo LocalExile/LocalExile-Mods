@@ -1,0 +1,10 @@
+{
+  "id": "ai-operator",
+  "name": "AI Operator",
+  "description": "Read-only chat commands that hand an outside AI a JSON picture of the area the character is in.",
+  "author": "LocalExile",
+  "version": "0.1.0",
+  "compatibleClientVersions": ["0.5.0-beta"],
+  "kind": "feature",
+  "depends": ["Game"]
+}

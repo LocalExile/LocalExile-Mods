@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- AI Operator: the read-only commands that hand an outside AI a JSON picture of the world (README.md).
+       Everything else is in Directory.Build.props. -->
+
+</Project>
