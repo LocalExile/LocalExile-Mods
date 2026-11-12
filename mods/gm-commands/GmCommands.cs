@@ -14,6 +14,16 @@ static class GmCommands
     /// <summary>The most /item_tab adds of one item type at a time.</summary>
     internal const int ItemTabMax = 1000;
 
+    /// <summary>The most tabs /stash_add leaves in all: the visible roots (a map tab's hidden pages do not count), so 40
+    /// by default; Game_STASH_TAB_CAP overrides it without a rebuild, and one call adds at most 10.</summary>
+    internal static readonly int StashTabCap =
+        int.TryParse(Environment.GetEnvironmentVariable("Game_STASH_TAB_CAP"), out int cap) && cap > 0 ? cap : 40;
+
+    internal const int StashAddMax = 10;
+
+    /// <summary>The /stash command: Game_STASH_PROBE=0 turns it off without a rebuild (the map case is unverified).</summary>
+    internal static readonly bool StashProbe = Environment.GetEnvironmentVariable("Game_STASH_PROBE") != "0";
+
     /// <summary>The /item_tab tab: the one with that name (case ignored), else the only tab of a type whose name starts with
     /// it (e.g. "divination" → DivinationStash); null when none or several match.</summary>
     internal static int? ItemTabOf(AccountStash stash, string name)
@@ -482,6 +492,46 @@ static class GmCommands
                 (requested > amount ? $" (at most {ItemTabMax} at a time)" : "") +
                 (fill.Full > 0 ? $"; {fill.Full} slot(s) already full" : "") +
                 (fill.Skipped > 0 ? $"; {fill.Skipped} type(s) skipped (the server can't create them or has no cell for their slot)" : ""));
+        })
+        .Add("stash_add", $"/stash_add <normal|premium|quad> [count] (dev: append 1-{StashAddMax} general stash tabs, at most {StashTabCap} in all; re-enter the area or relog to see them)", async args =>
+        {
+            if (args.Length is < 1 or > 2) throw new ArgumentException("/stash_add <normal|premium|quad> [count]");
+            byte type = args[0].ToLowerInvariant() switch
+            {
+                "normal" or "0" => 0,
+                "premium" or "1" => 1,
+                "quad" or "7" => 7,
+                _ => throw new ArgumentException($"only the general tabs: normal, premium, quad (not \"{args[0]}\"); the special tabs hold one kind of item"),
+            };
+            int count = 1;
+            if (args.Length == 2 && (!int.TryParse(args[1], out count) || count is < 1 or > StashAddMax))
+                throw new ArgumentException($"count is 1-{StashAddMax}");
+            var stash = PersonalStashOf(conn);
+            if (stash.VisibleCount + count > StashTabCap)
+            {
+                await conn.Commands!.Reply($"Refused: the stash has {stash.VisibleCount} visible tab(s) and at most {StashTabCap} are allowed (asked for {count}).");
+                return;
+            }
+            // The tab's name and colour are this command's choice, not the stash's.
+            (string Name, byte R, byte G, byte B) look = type switch
+            {
+                0 => ("Normal", (byte)0x7c, (byte)0x54, (byte)0x36),
+                1 => ("Premium", (byte)0x2c, (byte)0x6e, (byte)0xc8),
+                _ => ("Quad", (byte)0x8a, (byte)0x2b, (byte)0xe2),
+            };
+            var added = stash.AddTabs(type, count, look.Name, look.R, look.G, look.B);
+            string kind = type switch { 0 => "NormalStash", 1 => "PremiumStash", _ => "QuadStash" };
+            Console.WriteLine($"[gateway] {remote} /stash_add {kind} {count} -> tabs {string.Join(",", added)} ({stash.VisibleCount} visible in all, account {conn.Account ?? CharacterName(conn)}, league {conn.League ?? "Standard"})");
+            await conn.Commands!.Reply($"Added {added.Count} {kind} tab(s) {string.Join(", ", added)}; {stash.VisibleCount}/{StashTabCap} tabs. Re-enter the area (or relog) to see them.");
+        })
+        .Add("stash", "/stash (open the stash panel where the character stands: S→C 0x7b kind 1 on the area's stash object)", async args =>
+        {
+            if (!StashProbe) { await conn.Commands!.Reply("/stash is off (Game_STASH_PROBE=0)"); return; }
+            uint objectId = conn.StashObject;
+            await Send(remote, stream, ciphers, InstanceWaypoints.OpenUi(InstanceStash.OpenStashUi, objectId, 0),
+                $"0x007b open the stash on /stash (object 0x{objectId:x}, no walk)");
+            Console.WriteLine($"[gateway] {remote} /stash 0x7b kind {InstanceStash.OpenStashUi} object 0x{objectId:x} in {conn.Layout.Id}");
+            await conn.Commands!.Reply($"Sent the stash panel request (object 0x{objectId:x}). No panel means the client wants a real stash object in this area.");
         })
         .Add("adorned", "/adorned [0-1000] (dev: The Adorned unique jewel into the inventory, corrupted, for passive-jewel testing; the normal item range is 0-100)", async args =>
         {
