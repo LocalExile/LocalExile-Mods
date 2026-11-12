@@ -40,7 +40,7 @@ public sealed class PetLootMod : IMod
         mod.Log("opt-in pet pickup; /petloot for this character's rules.");
     }
 
-    static string Key(ClientState conn) => string.Join("|", new[] { conn.Account ?? "", conn.League ?? "Standard", Game.CharacterName(conn) }
+    static string Key(ClientState conn) => string.Join("|", new[] { conn.Account ?? "", conn.League ?? "Standard", Program.CharacterName(conn) }
         .Select(Uri.EscapeDataString));
 
     static Dictionary<string, int> Normalize(Dictionary<string, int> rules)
@@ -214,7 +214,7 @@ public sealed class PetLootMod : IMod
                 choices = next;
             }
             await conn.Commands!.Reply(action == "reset" ? "Pet Loot: this character now uses the server defaults."
-                : $"Pet Loot saved for {Game.CharacterName(conn)}: {(profile.Enabled ? "on" : "paused")}. /petloot list");
+                : $"Pet Loot saved for {Program.CharacterName(conn)}: {(profile.Enabled ? "on" : "paused")}. /petloot list");
         }
         finally { state.Gate.Release(); }
     }
