@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Zoom: a wider view in normal play (README.md). Everything else is in Directory.Build.props. -->
+
+</Project>
