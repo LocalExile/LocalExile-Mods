@@ -48,4 +48,4 @@ None. LocalExile's `/exchange` opens the window.
 
 ## LocalExile versions
 
-1.1.2 works with LocalExile v0.4.3-beta and v0.5.0-beta; 1.1.1 with v0.4.2-beta; 1.1.0 with v0.4.1-beta, the first with the one hook system (`GameEvents`). Its 1.0.x versions work with v0.2.1-beta to v0.4.0-beta. Needs a LocalExile with the Currency Exchange module (`ExchangeRateStore.Use`, `ExchangeRateStore.Publish`).
+1.1.3 works with LocalExile v0.4.3-beta, v0.5.0-beta and v0.5.1-beta (the same code as 1.1.2); 1.1.1 with v0.4.2-beta; 1.1.0 with v0.4.1-beta, the first with the one hook system (`GameEvents`). Its 1.0.x versions work with v0.2.1-beta to v0.4.0-beta. Needs a LocalExile with the Currency Exchange module (`ExchangeRateStore.Use`, `ExchangeRateStore.Publish`).

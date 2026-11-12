@@ -33,6 +33,7 @@ and curses on the character. That is told by the stat's name; for another value,
 LocalExile's own dev scripts (the campaign driver, the level generator's tour loop, `client_control.py`) and Waypoint's
 item crafter send these commands: install this mod for them.
 
-Works with: 1.1.3 works with LocalExile v0.4.3-beta and v0.5.0-beta; 1.1.2 with v0.4.3-beta, the first with the client-table
-API it reads (LocalExile/LocalExile#862). Mods reach what modules reach from v0.4.0-beta (LocalExile/LocalExile#815);
-not v0.3.0-beta or earlier.
+Works with: 1.3.0 needs LocalExile v0.5.1-beta (`/stash_add` uses LocalExile/LocalExile#891, and the server's monster calls
+changed). 1.1.3 works with v0.4.3-beta and v0.5.0-beta, not v0.5.1-beta: there its `/spawn_mob` fails and ends the
+connection. 1.1.2 works with v0.4.3-beta, the first with the client-table API it reads (LocalExile/LocalExile#862).
+Mods reach what modules reach from v0.4.0-beta (LocalExile/LocalExile#815); not v0.3.0-beta or earlier.

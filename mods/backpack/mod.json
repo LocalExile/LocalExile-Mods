@@ -3,10 +3,8 @@
   "name": "Extra Backpack",
   "description": "An optional native 20-slot extra backpack for every character class.",
   "author": "zj1022",
-  "version": "1.0.2",
-  "compatibleClientVersions": [
-    "0.5.0-beta"
-  ],
+  "version": "1.0.3",
+  "compatibleClientVersions": ["0.5.1-beta"],
   "kind": "feature",
   "depends": [],
   "enabled": false
