@@ -14,7 +14,7 @@ take the items out, and the empty grid disappears. Re-enabling restores deposits
 applies after uninstalling the mod, so saved items are not hidden. This protection is provided by the companion
 LocalExile change, even when the mod is gone. No scripts or background tasks remain running after unload.
 
-Requires the inventory grant and recovery support in LocalExile PR #769. The manifest lists 0.4.2-beta pending the first release containing that change.
+Requires a LocalExile build containing [#769](https://github.com/LocalExile/LocalExile/pull/769) for the hot toggle and withdrawal recovery. The change is on main. The manifest lists 0.5.0-beta as the catalogue placeholder until the first release that includes #769.
 
 The normal inventory remains the default destination for pickups. This mod adds no automatic pickup or automatic
 transfer to the extra grid. Pet Loot's item filters and pickup controls remain independent.

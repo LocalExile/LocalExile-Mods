@@ -1496,7 +1496,7 @@ static class GmCommands
             if (what.Equals("status", StringComparison.OrdinalIgnoreCase)) { await conn.Commands!.Reply(CaptureTour.Status(character)); return; }
             string path = string.Join(' ', args);
             if (!AreaLayouts.Recording) { await conn.Commands!.Reply("A tour needs the walk-map recorder: start the servers with live.ps1 -Walkmaps."); return; }
-            if (!ClientTables.Exists(path)) { await conn.Commands!.Reply($"No file {path} (relative to the Gateway's directory, the repository root)."); return; }
+            if (!File.Exists(path)) { await conn.Commands!.Reply($"No file {path} (relative to the Gateway's directory, the repository root)."); return; }
             await conn.Commands!.Reply(CaptureTour.Start(character, path));
             // Not awaited: a step waits for the client to arrive or to fail.
             _ = ContinueTour(remote, stream, ciphers, conn, starting: true);
