@@ -1,10 +1,14 @@
 {
   "id": "ai-operator",
   "name": "AI Operator",
-  "description": "Read-only chat commands that hand an outside AI a JSON picture of the area the character is in.",
+  "description": "Read-only chat commands that hand an outside AI a JSON picture of the area the character is in, and answer whether a cell can be walked to and why a target cannot be used.",
   "author": "drlupei",
-  "version": "0.1.1",
-  "compatibleClientVersions": ["0.5.0-beta"],
+  "version": "0.2.0",
+  "compatibleClientVersions": [
+    "0.5.0-beta"
+  ],
   "kind": "feature",
-  "depends": ["Game"]
+  "depends": [
+    "Game"
+  ]
 }

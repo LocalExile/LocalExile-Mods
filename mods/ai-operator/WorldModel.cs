@@ -85,6 +85,8 @@ internal static class WorldModel
                 ["index"] = transition.Index,
                 ["id"] = known ? to.Id : $"0x{transition.DestinationHash16:x4}",
                 ["name"] = name,
+                // The gate and the bridge aim at a cell, so an exit is useless to them without one.
+                ["pos"] = new JsonArray(transition.GridX, transition.GridY),
                 ["dist"] = Cells(distance),
             }));
         }
