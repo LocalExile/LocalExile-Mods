@@ -1,0 +1,13 @@
+{
+  "id": "petloot",
+  "name": "Pet Loot",
+  "description": "Worn pets collect selected currency with per-character filters and an immediate pause switch.",
+  "author": "zj1022",
+  "version": "1.0.4",
+  "compatibleClientVersions": [
+    "0.5.0-beta"
+  ],
+  "kind": "feature",
+  "depends": ["Game", "Cosmetics"],
+  "enabled": false
+}
