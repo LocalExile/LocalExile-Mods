@@ -258,10 +258,12 @@ static class GmCommands
                     new CharacterSaves.SavedMonsterStatue(x, y, 0, variety.Hash16, 100, variation));
             await conn.Commands!.Reply($"Monster statue of {variety} at ({x}, {y}) (object 0x{id:x}).");
         }, "monster")
-        .Add("item", "/item <BaseItemTypes row, Id, name or unique> [count] [magic|rare] (into the inventory, e.g. /item Small Life Flask 2, /item Iron Ring rare, /item Mageblood)", async args =>
+        .Add("item", "/item <BaseItemTypes row, Id, name or unique> [count] [magic|rare] [max] (into the inventory, e.g. /item Small Life Flask 2, /item Iron Ring rare, /item Mageblood max; max: as well rolled as it can be, as /item_max)", async args =>
         {
             if (args.Length == 0) throw new ArgumentException("which item?");
             ItemRarity rolled = ItemRarity.Normal;
+            bool max = args.Length > 1 && args[^1].Equals("max", StringComparison.OrdinalIgnoreCase);
+            if (max) args = args[..^1];
             if (args.Length > 1 && args[^1].ToLowerInvariant() is "magic" or "rare") { rolled = Enum.Parse<ItemRarity>(args[^1], true); args = args[..^1]; }
             int count = 1, requested = 1;
             if (args.Length > 1 && int.TryParse(args[^1], out int n)) { requested = n; count = Math.Clamp(n, 1, 60); args = args[..^1]; }
@@ -277,13 +279,13 @@ static class GmCommands
                         || ItemsFor(conn).ByHash(createdUnique.TypeHash) is not { } uniqueType
                         || uniqueItems.FreeCell(PlayerInventories.MainInventory, uniqueType.Width, uniqueType.Height, ShapeOf) is not { } uniqueCell) break;
                     uniqueAdded.Add(uniqueItems.Put(PlayerInventories.MainInventory,
-                        new InventoryItem(uniqueItems.NewItemId(), uniqueCell.X, uniqueCell.Y, createdUnique)));
+                        new InventoryItem(uniqueItems.NewItemId(), uniqueCell.X, uniqueCell.Y, max ? MaxRolled(conn, createdUnique) : createdUnique)));
                 }
                 if (uniqueAdded.Count == 0) { await conn.Commands!.Reply("No room in the inventory"); return; }
                 await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                     uniqueItems.NextRevision(PlayerInventories.MainInventory), [], uniqueAdded),
                     $"0x00bf inventory 1: /item {unique.Name} x {uniqueAdded.Count}");
-                await conn.Commands!.Reply($"Added {unique.Name}");
+                await conn.Commands!.Reply($"Added {unique.Name}{(max ? ", as well rolled as it can be" : "")}");
                 return;
             }
             if (UniquesFor(conn).NamedMap(query) is { } legendary)
@@ -328,6 +330,7 @@ static class GmCommands
                 var (sockets, links) = ItemsFor(conn).DefaultSockets(type, itemLevel);
                 var created = ItemCatalog.Create(type, sockets, links) with { ItemLevel = (byte)itemLevel };
                 if (rolled != ItemRarity.Normal) created = RollsFor(conn).Roll(created, rolled, Random.Shared);
+                if (max) created = MaxRolled(conn, created);
                 added.Add(items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, created)));
             }
             if (added.Count == 0) { await conn.Commands!.Reply("No room in the inventory"); return; }
@@ -952,6 +955,8 @@ static class GmCommands
             await ChangeHeldItem(remote, stream, ciphers, conn, i => RollsFor(conn).Roll(level is byte l ? i with { ItemLevel = l } : i, rarity, Random.Shared),
                 $"rolled {rarity}");
         })
+        .Add("item_max", "/item_max (the held item as well rolled as it can be: every implicit and explicit value at the top of its range, a magic or rare item's affixes at their best tier for its item level, the top base defence roll on armour; a value that picks something, as a Timeless Jewel's seed, stays)", async _ =>
+            await ChangeHeldItem(remote, stream, ciphers, conn, i => MaxRolled(conn, i), "as well rolled as it can be"))
         .Add("item_mods", "/item_mods (the held item's rarity and mods)", async args =>
         {
             if (ItemsOf(conn).Items(PlayerInventories.Cursor) is not [var held, ..]) { await conn.Commands!.Reply("Hold an item first"); return; }
