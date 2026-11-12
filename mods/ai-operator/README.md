@@ -6,7 +6,7 @@ command of the operator bridge: the server side of "tell me what is around me" t
 The command changes nothing. It does not walk, teleport, use a skill, pick anything up or touch the character's
 state: the only thing that leaves the server is the chat reply.
 
-## `/ai world [radius]`
+## `/aiop world [radius]`
 
 Prints the server's world model for the connection the command arrived on, as one compact JSON object split over
 chat lines: the first line starts with `AI `, the continuations with `AI+ `, and no line carries more than 900 JSON
@@ -48,14 +48,14 @@ monsters and ground items are listed nearest first. A list is cut at 60 monsters
 
 ### The client session is a bridge concept
 
-`/ai world` reports the **server-side** identity — `character` and `account` — because the server does not know the
+`/aiop world` reports the **server-side** identity — `character` and `account` — because the server does not know the
 name a control bridge gives its client session. In v1 the bridge maps its own session name 1:1 onto the character,
 so the brain joins the two; nothing here hard-codes a session string.
 
 ## Install
 
 Copy this folder (or the release zip) into `Mods/Binaries/ai-operator/`, or install it with Waypoint. Then `/mod`
-should list `ai-operator 0.1.0 - feature, 1 hook(s)`, and `/ai world` answers.
+should list `ai-operator 0.1.1 - feature, 1 hook(s)`, and `/aiop world` answers.
 
 ## Build
 
@@ -74,8 +74,8 @@ makes the zip and does that for you.
 
 | File | What it is |
 |---|---|
-| `AiOperatorMod.cs` | the `IMod` entry point: registers `/ai` with `GameEvents.Command` |
-| `AiCommands.cs` | `/ai` and its subcommands, and the usage line |
+| `AiOperatorMod.cs` | the `IMod` entry point: registers `/aiop` with `GameEvents.Command` (the name is unique: gm-commands owns `/ai`) |
+| `AiCommands.cs` | `/aiop` and its subcommands, and the usage line |
 | `WorldModel.cs` | the read-only world model, built as `System.Text.Json.Nodes` |
 | `ChatLines.cs` | the `AI ` / `AI+ ` splitter, 900 characters a line, surrogate-pair safe |
 

@@ -11,7 +11,7 @@ internal static class AiCommands
 {
     /// <summary>What <c>/ai</c> prints when it is asked for something it does not have.</summary>
     public const string Usage =
-        "/ai world [radius] (read-only: one AI {json} reply for the world model; long replies go on in AI+ lines; radius in cells, default 60)";
+        "/aiop world [radius] (read-only: one AI {json} reply for the world model; long replies go on in AI+ lines; radius in cells, default 60)";
 
     public static async Task Run(ClientState conn, string[] args)
     {
