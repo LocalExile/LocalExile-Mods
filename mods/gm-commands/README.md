@@ -16,7 +16,7 @@ whenever the Game module does.
 | Character | `/set_level`, `/add_xp`, `/gold`, `/add_passive_points`, `/add_refund_points`, `/add_passive`, `/reset_passives`, `/ascendancy`, `/ascendancy_points`, `/reset_ascendancy`, `/atlas_points`, `/waypoints`, `/quest_flag`, `/league_flag`, `/trials`, `/quest_preset` |
 | Stats | `/stat`, `/set_stat`, `/set_speed`, `/set_aoe`, `/god`, `/charges`, `/auras`, `/resistances`, `/crit`, `/block`, `/accuracy`, `/defences`, `/suppression` |
 | Test hits | `/hit`, `/spellhit`, `/blockhit`, `/blind`, `/heal`, `/death_screen`, `/block_luck`, `/suppression_luck` |
-| Areas and objects | `/stash_place`, `/guild_stash_place`, `/wp_place`, `/wp_state`, `/transition`, `/map_portal`, `/portal_rotation`, `/cosmetic`, `/hideout_keys`, `/atlas`, `/atlas_tree`, `/lab_layout` |
+| Areas and objects | `/stash_place`, `/guild_stash_place`, `/stash_add`, `/stash`, `/wp_place`, `/wp_state`, `/transition`, `/map_portal`, `/portal_rotation`, `/cosmetic`, `/hideout_keys`, `/atlas`, `/atlas_tree`, `/lab_layout` |
 | Trials of Ascendancy tuning | `/trial_spike_hit`, `/trial_spike_step`, `/trial_spike_anim`, `/trial_roomba_damage`, `/trial_saw_damage`, `/trial_dart_poison`, `/trial_lava` |
 | Protocol | `/raw`, `/ui` |
 | Campaign driver | `/state`, `/kill`, `/quest_preset` (LocalExile's `scripts/dev/campaign/`) |
