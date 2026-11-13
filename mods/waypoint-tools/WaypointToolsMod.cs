@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using GameServer.Core;
@@ -57,13 +59,8 @@ public sealed class WaypointToolsMod : IMod, IDisposable
         _mod = mod;
         Directory.CreateDirectory(Requests);
         Directory.CreateDirectory(Replies);
-        WriteAtomically(Loaded, new JsonObject
-        {
-            ["protocol"] = Protocol,
-            ["version"] = mod.Manifest.Version,
-            ["pid"] = Environment.ProcessId,
-            ["actions"] = new JsonArray("item_give"),
-        });
+        try { Serving(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { mod.Log($"writing {Loaded} failed: {e.Message}"); }
         GameEvents.Tick.Add(mod.Manifest.Id, (conn, _) => Tick(conn));
         _scan = new Timer(_ => Scan(), null, TimeSpan.Zero, TimeSpan.FromMilliseconds(250));
     }
@@ -74,8 +71,75 @@ public sealed class WaypointToolsMod : IMod, IDisposable
         lock (_scanning) _disposed = true;
         using (var stopped = new ManualResetEvent(false))
             if (_scan?.Dispose(stopped) == true) stopped.WaitOne(TimeSpan.FromSeconds(2));
-        // What was not answered stays in requests/: the next load reads it again, with its own age.
-        try { File.Delete(Loaded); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        // What was not answered stays in requests/: the next load reads it again, with its own age. The file goes only
+        // when it is this Gateway's: another one's stays.
+        try { if (Named() is var (pid, _) && pid == Environment.ProcessId) File.Delete(Loaded); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    /// <summary>
+    /// Whether this Gateway is the one <c>loaded.json</c> names, the one Waypoint's requests are for: the first to load
+    /// the mod in this folder, for as long as it runs. It takes the file when no running Gateway has it.
+    ///
+    /// A second Gateway in the same folder is one that was only asked a question: its <c>commands</c> and <c>values</c>
+    /// modes load the mods too, for their commands, and Waypoint's Console asks when it starts. Such a Gateway serves no
+    /// player and ends in a moment, so it must leave the file and the requests to the one that runs the game; written
+    /// by it, the file named a process that had ended, and Waypoint took the mod for not loaded. Should the named
+    /// Gateway end without unloading, the next scan of another takes its place.
+    /// </summary>
+    bool Serving()
+    {
+        if (Named() is var (pid, started))
+        {
+            if (pid == Environment.ProcessId) return true;
+            if (Runs(pid, started)) return false;
+        }
+        using var me = Process.GetCurrentProcess();
+        WriteAtomically(Loaded, new JsonObject
+        {
+            ["protocol"] = Protocol,
+            ["version"] = _mod.Manifest.Version,
+            ["pid"] = Environment.ProcessId,
+            // With the pid, which process: a number of an ended Gateway may be another process's by now.
+            ["started"] = me.StartTime.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+            ["actions"] = new JsonArray("item_give"),
+        });
+        return true;
+    }
+
+    /// <summary>The process <c>loaded.json</c> names and when it started (null from a version that did not write it), or
+    /// null without a readable file.</summary>
+    static (int Pid, DateTime? Started)? Named()
+    {
+        try
+        {
+            if (!File.Exists(Loaded) || JsonNode.Parse(File.ReadAllText(Loaded)) is not JsonObject json || (int?)json["pid"] is not int pid) return null;
+            return (pid, DateTime.TryParse((string?)json["started"], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var started)
+                ? started.ToUniversalTime() : null);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether that process still runs and is the one that wrote the file: started when the file says, or,
+    /// without a start time, a program of this Gateway's name.</summary>
+    static bool Runs(int pid, DateTime? started)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            if (process.HasExited) return false;
+            if (started is { } at) return Math.Abs((process.StartTime.ToUniversalTime() - at).TotalSeconds) < 2;
+            using var me = Process.GetCurrentProcess();
+            return string.Equals(process.ProcessName, me.ProcessName, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Reads the new requests, refuses those it cannot read, and answers those that waited too long.</summary>
@@ -86,6 +150,8 @@ public sealed class WaypointToolsMod : IMod, IDisposable
             if (_disposed) return;
             try
             {
+                // The requests are for the Gateway the file names.
+                if (!Serving()) return;
                 foreach (string file in Directory.EnumerateFiles(Requests, "*.json"))
                 {
                     string id = Path.GetFileNameWithoutExtension(file);
