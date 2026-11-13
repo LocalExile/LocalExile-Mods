@@ -64,45 +64,41 @@ static partial class GmCommandsRules
     static readonly System.Text.RegularExpressions.Regex OnEnemies = new(
         @"enem(y|ies).*damage_taken|ailment_types|chilling_areas", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
-    /// <summary>A non-unique cluster jewel as a drop rolls it: the size's base type with the enchantments that carry
-    /// how many passives it has, what its small passives grant (its theme) and its jewel sockets (two or one for a
-    /// large, one for a medium, none for a small). Null when the base type or a mod is missing from the game data.</summary>
-    internal static Item? CreateClusterJewel(int size, int passives, int sockets, string? theme = null,
-        IEnumerable<string>? notables = null)
+    /// <summary>
+    /// A non-unique cluster jewel through the server's own maker (<see cref="ClusterJewels.Create"/>): the size's base
+    /// with its enchantments (its theme and passive count, and its jewel sockets) and the affixes asked for, each at its
+    /// highest values. The words after the numbers are a theme and Mods Ids, in any order: a theme by its name with
+    /// underscores (fire_damage), its tag with or without "affliction_", or "none" for a jewel without one, whose
+    /// small passives the client draws as "Nothingness". Without a theme word it gets one of its size's, as a new item
+    /// does. Null with why when the game data lacks the base or a word is neither.
+    /// </summary>
+    internal static Item? CreateClusterJewel(int size, int passives, int sockets, IEnumerable<string> words, out string? error)
     {
         string name = size switch { 2 => "Large Cluster Jewel", 1 => "Medium Cluster Jewel", 0 => "Small Cluster Jewel", _ => "" };
-        if (name.Length == 0 || Items.Find(name) is not { } baseType) return null;
-        var asked = notables?.ToList() ?? [];
-        var mods = new List<ItemMod>();
-        // "Adds N Passive Skills": one enchantment mod whose two stats are the node index and the count.
-        if (Items.Mods.ById("JewelExpansionPassiveNodes") is { } count && count.Stats.Count >= 2)
-            mods.Add(new ItemMod(ModSection.Enchant, count.Hash, [0, passives]));
-        string socketMod = size switch
+        if (name.Length == 0 || Items.Find(name) is not { Cluster: { } cluster } type)
         {
-            2 => sockets >= 2 ? "JewelExpansionJewelNodesLarge2___" : "JewelExpansionJewelNodesLarge1",
-            1 => "JewelExpansionJewelNodesMedium",
-            _ => "",
-        };
-        if (sockets > 0 && socketMod.Length > 0 && Items.Mods.ById(socketMod) is { } socket && socket.Stats.Count > 0)
-            mods.Add(new ItemMod(ModSection.Enchant, socket.Hash, [.. socket.MaxValues()]));
-        // The theme: what the cluster's small passives grant ("Added Small Passive Skills grant: ..."). It is an
-        // enchantment (like the count and the sockets); a smaller jewel in a larger socket is padded by the client
-        // with empty nodes instead, see JewelFitsCell.
-        if (Items.Mods.ById(theme ?? "AfflictionJewelSmallPassivesGrantLife_") is { } themed && themed.Stats.Count > 0)
-            mods.Add(new ItemMod(ModSection.Enchant, themed.Hash, [.. themed.MaxValues()]));
-        // "1 Added Passive Skill is <notable>": an explicit prefix, one per notable the jewel has.
-        foreach (string notable in asked)
-            if (Items.Mods.ById(notable) is { } found && found.Stats.Count > 0)
-                mods.Add(new ItemMod(ModSection.Explicit, found.Hash, [.. found.MaxValues()]));
-        return ItemCatalog.Create(baseType) with
+            error = "The cluster jewel data is missing";
+            return null;
+        }
+        var offered = cluster.Offered.ToList();
+        ClusterJewels.Theme? theme = null;
+        bool themed = false;
+        var affixes = new List<ModCatalog.Mod>();
+        foreach (string word in words)
         {
-            // The notables are the item's only affixes. A jewel without one is Normal, one or two are Magic (a magic
-            // item may not have zero affixes: the client then renders the whole cluster as empty "Nothingness" nodes)
-            // and three (a large cluster can carry three) Rare.
-            Rarity = asked.Count switch { 0 => ItemRarity.Normal, <= 2 => ItemRarity.Magic, _ => ItemRarity.Rare },
-            ItemLevel = 68,
-            Mods = mods,
-        };
+            if (!themed && word.Equals("none", StringComparison.OrdinalIgnoreCase)) themed = true;
+            else if (!themed && (ClusterJewels.FindTheme(cluster, word) ?? ClusterJewels.FindTheme(cluster, word.Replace('_', ' '))
+                ?? ClusterJewels.FindTheme(cluster, "affliction_" + word)) is { } found) (theme, themed) = (found, true);
+            else if (Items.Mods.ById(word) is { Stats.Count: > 0 } mod) affixes.Add(mod);
+            else
+            {
+                error = $"\"{word}\" is neither a theme nor a mod. A {name}'s themes: {string.Join(", ", offered.Select(t => t.Name.Replace(' ', '_').ToLowerInvariant()))}";
+                return null;
+            }
+        }
+        if (!themed && offered.Count > 0) theme = offered[Random.Shared.Next(offered.Count)];
+        error = null;
+        return ClusterJewels.Create(type, theme, passives, sockets, affixes);
     }
 
     /// <summary>Voices, the unique Large Cluster Jewel: three jewel sockets plus 1, 3, 5 or 7 empty passives (the four
