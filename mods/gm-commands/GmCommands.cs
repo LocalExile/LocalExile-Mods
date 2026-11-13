@@ -488,9 +488,9 @@ static class GmCommands
                 return;
             }
             var now = fill.Changed.Concat(fill.Added).ToList();
-            if (now.Count > 0 && TabsSentOf(conn, stash).Contains(tab))
-                await Send(remote, stream, ciphers, InstanceItems.InventoryChange(stash.InventoryOf(tab), stash.NextRevision(tab),
-                    [.. fill.Changed.Select(i => i.Id)], now), $"0x00bf stash tab {tab}: /item_tab {stash.NameOf(tab)} {amount}, {now.Count} slot(s)");
+            if (now.Count > 0)
+                await SendTabChange(remote, stream, ciphers, conn, stash, tab,
+                    [.. fill.Changed.Select(i => i.Id)], now, $"0x00bf stash tab {tab}: /item_tab {stash.NameOf(tab)} {amount}, {now.Count} slot(s)");
             await conn.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\" ({stash.TypeOf(tab)}): up to {amount} more of {now.Count} item type(s)" +
                 (requested > amount ? $" (at most {ItemTabMax} at a time)" : "") +
                 (fill.Full > 0 ? $"; {fill.Full} slot(s) already full" : "") +
