@@ -7,3 +7,5 @@ obj/
 
 # tools/build-release.ps1 builds the release zips here.
 /out/
+tools/ai-operator/runs/
+__pycache__/

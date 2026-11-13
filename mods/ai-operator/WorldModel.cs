@@ -45,6 +45,7 @@ internal static class WorldModel
                 {
                     ["id"] = id,
                     ["name"] = monster.Variety?.Name ?? monster.Label,
+                    ["pos"] = new JsonArray(at.x, at.y),
                     ["dist"] = Cells(distance),
                     ["life"] = monster.Life,
                     ["maxLife"] = monster.MaxLife,
@@ -68,6 +69,7 @@ internal static class WorldModel
             {
                 ["id"] = id,
                 ["label"] = type?.Name ?? string.Join('/', item.Item.Components),
+                ["pos"] = new JsonArray(item.GridX, item.GridY),
                 ["dist"] = Cells(distance),
             }));
         }
@@ -75,7 +77,7 @@ internal static class WorldModel
 
         var exits = new JsonArray();
         var exitRows = new List<(double Distance, JsonObject Row)>();
-        foreach ((uint _, AreaTransitionObject transition) in conn.Layout.AreaTransitions)
+        foreach ((uint id, AreaTransitionObject transition) in conn.Layout.AreaTransitions)
         {
             double distance = Distance(px, py, transition.GridX, transition.GridY);
             bool known = areas.TryGetValue(transition.DestinationHash16, out AreaName to);
@@ -83,6 +85,9 @@ internal static class WorldModel
             exitRows.Add((distance, new JsonObject
             {
                 ["index"] = transition.Index,
+                // The object id the transition carries: the bridge's interact names it, and /state prints the same
+                // number as the transition's id. Without it a caller can only stand next to a door, not take it.
+                ["object"] = id,
                 ["id"] = known ? to.Id : $"0x{transition.DestinationHash16:x4}",
                 ["name"] = name,
                 // The gate and the bridge aim at a cell, so an exit is useless to them without one.

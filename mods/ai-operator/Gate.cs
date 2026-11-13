@@ -55,7 +55,11 @@ internal static class Gate
         answer["exact"] = reached;
         // The search answers with waypoints, not one cell per step, so the length is measured corner to corner.
         answer["steps"] = Steps(path);
-        if (reached) return answer;
+        if (reached)
+        {
+            answer["waypoints"] = Waypoints(path, 12);
+            return answer;
+        }
 
         // A goal that cannot be stood on — a transition's own cell, a chest, a blocked doorway — is still useful
         // within reach of it: report the nearest walkable cell a walk can finish on, so the caller aims at that.
@@ -65,6 +69,21 @@ internal static class Gate
             answer["standAt"] = new JsonArray(stand.Path[^1].X, stand.Path[^1].Y);
             answer["standDist"] = Math.Round(CellDistance(stand.Path[^1], (x, y)), 1);
             answer["steps"] = Steps(stand.Path);
+            answer["waypoints"] = Waypoints(stand.Path, 12);
+            return answer;
+        }
+
+        // The search may have walked part of the way and stopped (a walled arena, a body on the only entrance). Those
+        // corners are still a route as far as the grid and the live blockers allow, and they are what a caller needs to
+        // get closer instead of being told "no": drop them and the operator has nothing to aim at.
+        if (path.Count > 0)
+        {
+            answer["partial"] = true;
+            answer["reachedTo"] = new JsonArray(path[^1].X, path[^1].Y);
+            answer["steps"] = Steps(path);
+            answer["waypoints"] = Waypoints(path, 12);
+            answer["blockedBy"] = "only part of the way to it can be walked (the goal is walled off, or something " +
+                "stands on it): follow these corners, then ask again";
             return answer;
         }
 
@@ -74,7 +93,44 @@ internal static class Gate
             : ClientPathfinder.ObjectBlocks(conn.Blockers, x, y, threshold: 2, radius: 1)
                 ? "a monster or an object stands on the goal cell right now, and no cell around it can be reached"
                 : "no route on the server's walk grid (a sealed corridor, or the grid disagrees with the client's own)";
+        if (FarthestToward(conn, layout, (px, py), (x, y)) is { } part)
+        {
+            // The player's walk search is bounded by an ellipse around the character, so a goal a thousand cells
+            // away is simply outside it. The useful answer there is not "no" but "this is how far one walk reaches
+            // toward it": the operator follows those corners, re-reads the world, and asks again.
+            answer["partial"] = true;
+            answer["reachedTo"] = new JsonArray(part.Reached.X, part.Reached.Y);
+            answer["steps"] = Steps(part.Path);
+            answer["waypoints"] = Waypoints(part.Path, 12);
+            answer["blockedBy"] = "the goal is beyond the client's own walk search (it is windowed around the " +
+                "character): this reaches part of the way toward it — follow the corners, then ask again";
+        }
         return answer;
+    }
+
+    /// <summary>
+    /// The longest single walk toward a goal that the search can actually finish, as a path and the cell it reached.
+    /// The hops are tried longest first so the answer is the furthest the client can go in one plan.
+    /// </summary>
+    static (List<(int X, int Y)> Path, (int X, int Y) Reached)? FarthestToward(ClientState conn, AreaLayout layout,
+        (int X, int Y) from, (int X, int Y) goal)
+    {
+        double dx = goal.X - from.X, dy = goal.Y - from.Y;
+        double span = Math.Max(1.0, Math.Sqrt(dx * dx + dy * dy));
+        foreach (int hop in new[] { 280, 220, 170, 130, 90, 50, 25 })
+        {
+            if (hop >= span) continue;      // the goal itself is nearer than this hop
+            int tx = (int)Math.Round(from.X + dx / span * hop);
+            int ty = (int)Math.Round(from.Y + dy / span * hop);
+            if (tx < 0 || ty < 0 || tx >= layout.GridW || ty >= layout.GridH) continue;
+            if (!layout.WalkableFor(tx, ty, 1)) continue;
+            List<(int X, int Y)> path = ClientPathfinder.FindPath(from, (tx, ty),
+                (cx, cy) => layout.WalkableFor(cx, cy, 1), layout.GridW, layout.GridH, conn.Blockers,
+                moverSize: 1, minRange: 0, maxRange: 0, tolerance: -1,
+                limit: ClientPathfinder.SearchLimit.Player, out bool reached);
+            if (reached && path.Count > 1) return (path, (tx, ty));
+        }
+        return null;
     }
 
     /// <summary>
@@ -84,7 +140,10 @@ internal static class Gate
     static (List<(int X, int Y)> Path, int Ring)? StandNear(ClientState conn, AreaLayout layout, (int X, int Y) from,
         int x, int y)
     {
-        for (int ring = 1; ring <= 3; ring++)
+        // A transition's own cell is blocked by the transition's own footprint (its size is 5), so "near" has to
+        // reach further than three cells; each ring is searched nearest the goal first and only its eight nearest
+        // cells are tried, which bounds the cost of the walk searches.
+        for (int ring = 1; ring <= 8; ring++)
         {
             var candidates = new List<(int X, int Y)>();
             for (int dy = -ring; dy <= ring; dy++)
@@ -99,7 +158,7 @@ internal static class Gate
                 }
             }
             candidates.Sort((a, b) => CellDistance(a, (x, y)).CompareTo(CellDistance(b, (x, y))));
-            foreach ((int X, int Y) candidate in candidates)
+            foreach ((int X, int Y) candidate in candidates.Take(8))
             {
                 List<(int X, int Y)> path = ClientPathfinder.FindPath(from, candidate,
                     (cx, cy) => layout.WalkableFor(cx, cy, 1), layout.GridW, layout.GridH, conn.Blockers,
@@ -122,6 +181,24 @@ internal static class Gate
 
     static double CellDistance((int X, int Y) a, (int X, int Y) b) =>
         Math.Sqrt((double)(a.X - b.X) * (a.X - b.X) + (double)(a.Y - b.Y) * (a.Y - b.Y));
+
+    /// <summary>
+    /// The corners of a path, thinned to at most <paramref name="most"/> points with the far end last. The routine
+    /// walks these one at a time: a click only resolves within a screen radius, so aiming straight at a distant cell
+    /// walks the character into whatever stands in the way, while the waypoints keep it on the route the server's
+    /// walk grid knows.
+    /// </summary>
+    static JsonArray Waypoints(List<(int X, int Y)> path, int most)
+    {
+        var points = new JsonArray();
+        if (path.Count == 0) return points;
+        var kept = new List<(int X, int Y)>();
+        int step = Math.Max(1, (int)Math.Ceiling(path.Count / (double)Math.Max(1, most)));
+        for (int i = step; i < path.Count; i += step) kept.Add(path[i]);
+        if (kept.Count == 0 || kept[^1] != path[^1]) kept.Add(path[^1]);
+        foreach ((int X, int Y) cell in kept) points.Add(new JsonArray(cell.X, cell.Y));
+        return points;
+    }
 
     /// <summary>
     /// Whether a ground item can be picked up from where the character stands, with the server's own numbers
