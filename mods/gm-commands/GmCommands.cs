@@ -714,7 +714,7 @@ static class GmCommands
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /voices {empty}");
             await conn.Commands!.Reply($"Voices ({empty} empty passive(s)) added to the inventory");
         })
-        .Add("cluster_jewel", "/cluster_jewel <small|medium|large> [passives] [sockets] [theme mod] [notable mod ...] (dev: a non-unique cluster jewel with its enchantments, into the inventory; defaults 3/4/8 passives and 0/1/2 sockets)", async args =>
+        .Add("cluster_jewel", "/cluster_jewel <small|medium|large> [passives] [sockets] [theme] [mod ...] (dev: a non-unique cluster jewel into the inventory. theme: its name with underscores, e.g. fire_damage, or none; without one it gets one of its size's. mod: Mods Ids of its affixes, e.g. a notable's. Defaults: 3/4/8 passives and 0/1/2 sockets)", async args =>
         {
             int size = args.Length > 0 ? args[0].ToLowerInvariant() switch
             {
@@ -729,10 +729,12 @@ static class GmCommands
                 return;
             }
             int passives = args.Length > 1 && int.TryParse(args[1], out int p) ? p : size switch { 2 => 8, 1 => 4, _ => 3 };
-            int sockets = args.Length > 2 && int.TryParse(args[2], out int s) ? s : size switch { 2 => 2, 1 => 1, _ => 0 };
-            if (CreateClusterJewel(size, passives, sockets, args.Length > 3 ? args[3] : null, args.Skip(4)) is not { } jewel)
+            int sockets = args.Length > 2 && int.TryParse(args[1], out _) && int.TryParse(args[2], out int s) ? s : size switch { 2 => 2, 1 => 1, _ => 0 };
+            // The numbers may be left out: every word that is not one is a theme or a mod.
+            int numbers = args.Skip(1).TakeWhile(a => int.TryParse(a, out _)).Take(2).Count();
+            if (CreateClusterJewel(size, passives, sockets, args.Skip(1 + numbers), out string? why) is not { } jewel)
             {
-                await conn.Commands!.Reply("The cluster jewel data is missing");
+                await conn.Commands!.Reply(why ?? "The cluster jewel data is missing");
                 return;
             }
             var items = ItemsOf(conn);
@@ -744,7 +746,8 @@ static class GmCommands
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, jewel));
             await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /cluster_jewel {size} {passives} {sockets}");
-            await conn.Commands!.Reply($"Cluster jewel ({args[0]}, {passives} passive(s), {sockets} socket(s)) added to the inventory");
+            string themeName = ItemsFor(conn).ByHash(jewel.TypeHash) is { } made && ClusterJewels.ThemeOf(made, jewel) is { } theme ? theme.Name : "no theme";
+            await conn.Commands!.Reply($"Cluster jewel ({args[0]}, {themeName}, {passives} passive(s), {sockets} socket(s)) added to the inventory");
         })
         .Add("corrupt", "/corrupt (dev: marks the held item corrupted, e.g. to make a corrupted magic jewel)", async _ =>
         {
