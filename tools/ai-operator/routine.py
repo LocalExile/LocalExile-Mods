@@ -331,6 +331,19 @@ class Routine:
         self.records.action(self.round, "useSkill", {"x": int(at[0]), "y": int(at[1]), "target": int(target)},
                             result, int(result.get("elapsedMs") or 0))
         hit = bool(result.get("ok")) and bool(result.get("sent"))
+        if not result.get("ok") and "cells short" in str(result.get("reason") or ""):
+            # The gate measures distance, the client measures the *cursor*: a monster 15 cells away can still be 20
+            # cells beyond where the cursor may be put (the edge of the viewport, or behind the interface). The
+            # client's own sentence is the authority here, so it means "walk closer", not "try again".
+            self.records.event("the cursor cannot reach the target from here", where=at,
+                               said=result.get("reason"))
+            walked, _note = self._walk_near(int(at[0]), int(at[1]), "engage", {"target": target}, tolerance=1)
+            if walked.get("reached"):
+                result = self.hands.act("useSkill", x=int(at[0]), y=int(at[1]), target=int(target), slot=0)
+                self.primitives += 1
+                self.records.action(self.round, "useSkill", {"x": int(at[0]), "y": int(at[1]), "target": int(target)},
+                                    result, int(result.get("elapsedMs") or 0))
+                hit = bool(result.get("ok")) and bool(result.get("sent"))
         return self._done(hit, "swung at the target" if hit else str(result.get("reason") or "the swing did not go out"))
 
     def _loot(self, object_id: int, snapshot: dict) -> dict:
