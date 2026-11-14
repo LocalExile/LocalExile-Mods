@@ -65,6 +65,7 @@ static class PobBridge
         finally
         {
             if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync(CancellationToken.None);
             try { await Task.WhenAll(output, error); } catch (Exception e) when (e is OperationCanceledException or InvalidDataException or IOException) { }
         }
     }

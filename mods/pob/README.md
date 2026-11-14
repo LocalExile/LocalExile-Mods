@@ -2,7 +2,7 @@
 
 Optional Path of Building import front end for LocalExile. It is a normal global mod: `IMod`, `mod.json`, host-managed settings and hot reload. It uses the public SDK and Gateway `GameEvents`; it is absent from server modules, league lists and normal server releases.
 
-Works with LocalExile **0.4.3-beta**, **0.5.0-beta** and **0.5.1-beta**; it was written for 0.4.2-beta, the release including #821 (slim loader API), #818 (GameEvents), and #639 (validated imports). Stock 0.4.1-beta is not supported.
+The strict converter requires the companion LocalExile server update. The manifest lists 0.5.1-beta as a placeholder until that update ships; the unchanged frontend contract remains compatible with that SDK.
 
 ## Installation and commands
 
@@ -44,6 +44,38 @@ For a native input snapshot, `SourceFile` is its validated inbox path. The conve
 
 There is one converter process at a time, a 90-second timeout, an 8 Mi-character stdout limit and an 8 Ki-character stderr limit. Timeout, unload, malformed output, identity mismatch or conversion failure leave the old build intact. No account credentials or writable save database are passed to the process. This is trusted operator software, not an operating-system sandbox.
 
-Import replaces class, level, experience, passives/masteries/tattoos, ascendancy, equipment, swapped weapons, flasks, gems and jewels. It preserves the latest quest/waypoint progress, other inventories, cosmetics and unrelated module state. Old aura/stance/golem intent and derived vitals are cleared; the server retires stale inventory writers and gem/equipment identities after a successful commit. Already accepted imports finish under server ownership even if the mod then unloads.
+Import replaces class, level, experience, passives/masteries/tattoos, main and secondary ascendancy, equipment, swapped weapons, flasks, gems and jewels. It preserves the latest quest/waypoint progress, other inventories, cosmetics and unrelated module state. An exported bandit choice updates only its module-owned quest rewards. Old aura/stance/golem intent and derived vitals are cleared; the server retires stale inventory writers and gem/equipment identities after a successful commit. Already accepted imports finish under server ownership even if the mod then unloads.
 
-No PoB parser, converter implementation, client changes, credentials or game assets ship with this mod.
+No converter executable, client changes, credentials or game assets ship with the frontend release.
+
+## Strict converter source
+
+`Converter/PobImport.csproj` builds the separate, operator-configured .NET 10 converter from source.
+It requires the companion LocalExile update for native item properties and game-owned import validation.
+The compatibility version in the manifest is a placeholder pending that server update.
+The frontend release does not automatically build, install or run this source project.
+
+From this repository root, a build for an existing LocalExile checkout is:
+
+```powershell
+dotnet build mods/pob/Converter/PobImport.csproj -c Release -p:LocalExileRoot=C:/LocalExile
+```
+
+`converterExecutable` points to the resulting `PobImport.exe` on Windows, or the platform's generated
+`PobImport` executable. The converter process runs from the LocalExile checkout, with its `data/client.db`
+and read-only `data/world.db`. It returns the version-1 prepared build; it never opens a character save store.
+The separate converter's upstream source attribution and license are in `Converter/NOTICE.txt` and `Converter/LICENSE`.
+
+The converter preserves native modifiers, physical gem sockets, inactive gems, influences, alternate quality,
+Intangibility, Memory Strands, foil/vestigial state, level requirements, ordinary/cluster passives,
+secondary ascendancy, bandit intent and native passive overrides. Unresolvable item/gem/passive data fails
+preparation instead of producing a partial character or substituting maximum rolls.
+Native properties and selected effects being retained does not establish complete combat parity.
+
+PoB text sometimes omits raw affix rolls, physical gem positions or transformed item state.
+`/pob file build.json` accepts the original native poe.ninja snapshot, including its matching `pob` code,
+for those cases. An optional operator-maintained `data/pob-import/source-index.json` maps the SHA-256
+of a complete share code to that snapshot's path. An optional `native-items.db` supplies exact item
+fingerprints for items retained across edited exports. A same-UID item with different text/rolls does not
+reuse cached native rolls. Neither snapshots nor indexes, client tables, game files or personal builds
+ship with the mod. Existing `converterExecutable` settings and raw-code/file/confirmation commands remain valid.
