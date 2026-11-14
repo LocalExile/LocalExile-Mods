@@ -63,7 +63,9 @@ internal static class Gate
 
         // A goal that cannot be stood on — a transition's own cell, a chest, a blocked doorway — is still useful
         // within reach of it: report the nearest walkable cell a walk can finish on, so the caller aims at that.
-        if (StandNear(conn, layout, (px, py), x, y) is { } stand)
+        // An empty path means the character already stands on that cell: there is no last corner to take, so there
+        // is no stand cell to report either. Taking path[^1] of an empty path is an index of -1.
+        if (StandNear(conn, layout, (px, py), x, y) is { } stand && stand.Path.Count > 0)
         {
             answer["reachable"] = true;
             answer["standAt"] = new JsonArray(stand.Path[^1].X, stand.Path[^1].Y);
@@ -93,7 +95,7 @@ internal static class Gate
             : ClientPathfinder.ObjectBlocks(conn.Blockers, x, y, threshold: 2, radius: 1)
                 ? "a monster or an object stands on the goal cell right now, and no cell around it can be reached"
                 : "no route on the server's walk grid (a sealed corridor, or the grid disagrees with the client's own)";
-        if (FarthestToward(conn, layout, (px, py), (x, y)) is { } part)
+        if ((ClosestToward(conn, layout, (px, py), x, y) ?? FarthestToward(conn, layout, (px, py), (x, y))) is { } part)
         {
             // The player's walk search is bounded by an ellipse around the character, so a goal a thousand cells
             // away is simply outside it. The useful answer there is not "no" but "this is how far one walk reaches
@@ -112,6 +114,68 @@ internal static class Gate
     /// The longest single walk toward a goal that the search can actually finish, as a path and the cell it reached.
     /// The hops are tried longest first so the answer is the furthest the client can go in one plan.
     /// </summary>
+    /// <summary>
+    /// The reachable cell that ends closest to a goal the direct route cannot reach, and the way to it.
+    ///
+    /// The straight-line hops of <see cref="FarthestToward"/> cannot go round a wall: every hop lands on a cell the
+    /// grid calls unwalkable and the answer is "no". A boss in an arena is entered from one side, so the way in is a
+    /// detour, and a detour is what this finds: a breadth-first search over the walkable cells around the character,
+    /// keeping the one that ends closest to the goal.
+    /// </summary>
+    static (List<(int X, int Y)> Path, (int X, int Y) Reached)? ClosestToward(ClientState conn, AreaLayout layout,
+        (int X, int Y) from, int x, int y)
+    {
+        const int window = 90;                      // the client's own walk search is windowed around the character
+        // The answer has to be quick: the gateway serves the client's messages on one loop, and a search that takes
+        // seconds is a client that times out and disconnects. The budget turns a slow search into a smaller one.
+        long deadline = Environment.TickCount64 + 250;
+        bool Walkable(int cx, int cy) =>
+            cx >= 0 && cy >= 0 && cx < layout.GridW && cy < layout.GridH &&
+            layout.WalkableFor(cx, cy, 1) && !ClientPathfinder.ObjectBlocks(conn.Blockers, cx, cy, 2, 5);
+
+        var parent = new Dictionary<(int, int), (int, int)>();
+        var length = new Dictionary<(int, int), int>();
+        var queue = new Queue<(int X, int Y)>();
+        parent[from] = from;
+        length[from] = 0;
+        queue.Enqueue(from);
+        (int X, int Y)? best = null;
+        int bestDistance = int.MaxValue, bestLength = int.MaxValue;
+        while (queue.Count > 0)
+        {
+            var cell = queue.Dequeue();
+            int cl = length[cell];
+            int distance = Math.Max(Math.Abs(cell.X - x), Math.Abs(cell.Y - y));
+            if (distance < bestDistance || (distance == bestDistance && cl < bestLength))
+            {
+                bestDistance = distance;
+                bestLength = cl;
+                best = cell;
+            }
+            if (cl >= window) continue;
+            if ((cl & 63) == 0 && Environment.TickCount64 > deadline) break;
+            var around = new[] { (cell.X + 1, cell.Y), (cell.X - 1, cell.Y), (cell.X, cell.Y + 1), (cell.X, cell.Y - 1) };
+            foreach (var next in around)
+            {
+                if (parent.ContainsKey(next)) continue;
+                if (!Walkable(next.Item1, next.Item2)) continue;
+                parent[next] = cell;
+                length[next] = cl + 1;
+                queue.Enqueue(next);
+            }
+        }
+        if (best is not { } cell2 || cell2 == from) return null;
+        var path = new List<(int X, int Y)>();
+        var walk = cell2;
+        while (walk != from)
+        {
+            path.Add(walk);
+            walk = parent[walk];
+        }
+        path.Reverse();
+        return (path, cell2);
+    }
+
     static (List<(int X, int Y)> Path, (int X, int Y) Reached)? FarthestToward(ClientState conn, AreaLayout layout,
         (int X, int Y) from, (int X, int Y) goal)
     {

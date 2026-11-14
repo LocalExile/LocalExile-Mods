@@ -224,11 +224,18 @@ def main(argv=None) -> int:
 
             result = routine.execute(intent, snapshot)
             last = {"intent": args_of_next, "ok": result["ok"], "reason": result["reason"],
-                    "primitives": result["primitives"]}
+                    "primitives": result["primitives"], "pos": snapshot.get("pos")}
             if not args.quiet:
                 print(f"      -> ok={result['ok']} {result['reason']}")
             if not result["ok"]:
-                repeats[key] = repeats.get(key, 0) + 1
+                # A repeat only counts when nothing moved. An intent that fails but leaves the character closer is
+                # progress, not a loop: the walk towards a walled boss takes several rounds by nature, and stopping
+                # after two of them ends the run before the corridor is walked.
+                moved = snapshot.get("pos") != (last.get("pos") if isinstance(last, dict) else None)
+                if moved and isinstance(last, dict):
+                    last = dict(last)
+                    last["pos"] = snapshot.get("pos")
+                repeats[key] = repeats.get(key, 0) + (0 if moved else 1)
                 if repeats[key] >= 2 and (args.routine_only or brain is None):
                     records.event("the routine cannot do this", intent=args_of_next, reason=result["reason"])
                     break

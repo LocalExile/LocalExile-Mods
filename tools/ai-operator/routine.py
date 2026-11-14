@@ -260,8 +260,15 @@ class Routine:
         route, _why = self.gate.route(x, y)
         if route:
             corner = route[-1]
+            # The route may stop at a blocker standing in the way (a monster counts as one), which is a few cells from
+            # the character rather than near the target. A corner that is still far from the goal is not the way in.
+            gap = max(abs(corner[0] - x), abs(corner[1] - y))
+            if gap <= 12:
+                return True, "", {"x": corner[0], "y": corner[1],
+                                  "how": f"the gate's route, {len(route)} corner(s) in, its last one"}
             return True, "", {"x": corner[0], "y": corner[1],
-                              "how": f"the gate's route, {len(route)} corner(s) in, its last one"}
+                              "how": f"the gate's route ends {gap} cells short (something stands in the way)",
+                              "short": True}
         # Each ask is a chat round trip (2-4 s), so the ring is small and nearest first: the four sides at 3 and at 5
         # cells, which is where a body's neighbours are. A wider search is the model's job, not the routine's.
         for radius in (3, 5):
@@ -290,6 +297,21 @@ class Routine:
                     # cell three cells away, and a walk that close is inside the walk tolerance and does nothing.
                     return True, "", {"x": mx, "y": my, "tight": True,
                                       "how": f"{step} cells toward it, the goal itself is shut"}
+        # The server's walk grid can stop well short of a target in a walled arena: it answers "this is how far I
+        # can see", not "this is how far the client can walk". The client keeps its own grid and is authoritative for
+        # its own walking, so the last move is to aim at the point the *cursor* can reach - about ten cells short of
+        # the target - and let the client take it. The gate's refusal is recorded as an override, not obeyed.
+        here = (snapshot or {}).get("pos")
+        if here:
+            hx, hy = int(here[0]), int(here[1])
+            span = max(abs(x - hx), abs(y - hy)) or 1
+            if span > 11:
+                t = (span - 10) / span
+                mx = int(round(hx + (x - hx) * t))
+                my = int(round(hy + (y - hy) * t))
+                if (mx, my) != (hx, hy):
+                    return True, "", {"x": mx, "y": my, "how": "within the cursor's reach; the gate's grid stops short",
+                                      "override": blocked}
         return False, blocked or "no cell near it can be stood on", {}
 
     def _engage(self, target: int, snapshot: dict) -> dict:
@@ -326,7 +348,8 @@ class Routine:
         at = why.get("pos") or at
         if at is None:
             return self._refuse("engage", {"target": target}, "the target has no position in the answer")
-        result = self.hands.act("useSkill", x=int(at[0]), y=int(at[1]), target=int(target), slot=0)
+        result = self.hands.act("useSkill", x=int(at[0]), y=int(at[1]), target=int(target),
+                                    slot=self.ATTACK_SLOT)
         self.primitives += 1
         self.records.action(self.round, "useSkill", {"x": int(at[0]), "y": int(at[1]), "target": int(target)},
                             result, int(result.get("elapsedMs") or 0))
@@ -339,7 +362,8 @@ class Routine:
                                said=result.get("reason"))
             walked, _note = self._walk_near(int(at[0]), int(at[1]), "engage", {"target": target}, tolerance=1)
             if walked.get("reached"):
-                result = self.hands.act("useSkill", x=int(at[0]), y=int(at[1]), target=int(target), slot=0)
+                result = self.hands.act("useSkill", x=int(at[0]), y=int(at[1]), target=int(target),
+                                        slot=self.ATTACK_SLOT)
                 self.primitives += 1
                 self.records.action(self.round, "useSkill", {"x": int(at[0]), "y": int(at[1]), "target": int(target)},
                                     result, int(result.get("elapsedMs") or 0))
@@ -407,6 +431,11 @@ class Routine:
 
     # The death panel is centred and its two buttons are at half the client width, at these fractions of its height
     # (measured on an 800x600 client: 0.283 -> y 170, 0.325 -> y 195). Agents/docs/dev/ai-operator.md.
+    # The bar slot that carries an attack: slot 0 is Action/Move (the client's default for the left button), slot 2 is
+    # PlayerMelee, the basic attack, which needs no gem and no effect to be resolved. Asking for slot 0 swings a
+    # move order at the target and hits nothing.
+    ATTACK_SLOT = 2
+
     RESURRECT_IN_TOWN = (0.5, 0.283)
     RESURRECT_AT_CHECKPOINT = (0.5, 0.325)
 
