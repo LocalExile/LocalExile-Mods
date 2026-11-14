@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>PobImport</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <NoWarn>$(NoWarn);CS8618;CS8632</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <Compile Include="$(LocalExileDir)src/GameServer.Gateway/Item/StatDescriptions.cs" Link="Server/StatDescriptions.cs" />
+    <Compile Include="$(LocalExileDir)src/GameServer.Core/Tables/ClientTables.cs" Link="Server/ClientTables.cs" />
+    <Compile Include="$(LocalExileDir)src/GameServer.Core/Tables/ClientTable.cs" Link="Server/ClientTable.cs" />
+    <Compile Include="$(LocalExileDir)Modules/Core/Game/Item/CatalystQuality.cs" Link="Server/CatalystQuality.cs" />
+    <Compile Include="$(LocalExileDir)Modules/Core/Game/Item/HeistModifierMagnitudes.cs" Link="Server/HeistModifierMagnitudes.cs" />
+  </ItemGroup>
+</Project>
