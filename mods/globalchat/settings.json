@@ -1,15 +1,236 @@
 {
-  "version": 1,
+  "version": 7,
   "settings": {
-    "host": {
-      "type": "text", "default": "localexile-chat.duckdns.org", "minLength": 1,
-      "label": "Address",
-      "description": "The IP or host name of the chat server."
+    "discordBotToken": {
+      "type": "text",
+      "format": "password",
+      "default": "",
+      "label": "Discord bot token",
+      "description": "Saved in local globalchat.json. LOCALEXILE_DISCORD_BOT_TOKEN overrides this value."
     },
-    "port": {
-      "type": "integer", "default": 6113, "min": 1, "max": 65535,
-      "label": "Port",
-      "description": "The port of the chat server."
+    "globalChannels": {
+      "type": "map",
+      "default": {
+        "1": {
+          "type": "server",
+          "address": "localexile-chat.duckdns.org",
+          "port": 6113,
+          "discordChannelId": "",
+          "sendToDiscord": true
+        },
+        "2": {
+          "type": "discord",
+          "address": "",
+          "port": 6113,
+          "discordChannelId": "",
+          "sendToDiscord": true
+        },
+        "8": {
+          "type": "fake",
+          "address": "",
+          "port": 6113,
+          "discordChannelId": "",
+          "sendToDiscord": true
+        }
+      },
+      "label": "Global channel routes",
+      "description": "Add or remove numbered channel routes. Use channel numbers from 1 to 65534.",
+      "value": {
+        "type": "group",
+        "settings": {
+          "type": {
+            "type": "choice",
+            "default": "blank",
+            "label": "Route type",
+            "options": [
+              {
+                "value": "server",
+                "label": "Shared server"
+              },
+              {
+                "value": "discord",
+                "label": "Discord"
+              },
+              {
+                "value": "fake",
+                "label": "Simulated chat"
+              },
+              {
+                "value": "blank",
+                "label": "Local chat"
+              }
+            ]
+          },
+          "address": {
+            "type": "text",
+            "default": "",
+            "label": "Server address",
+            "when": {
+              "type": "server"
+            }
+          },
+          "port": {
+            "type": "integer",
+            "default": 6113,
+            "min": 1,
+            "max": 65535,
+            "label": "Server port",
+            "when": {
+              "type": "server"
+            }
+          },
+          "discordChannelId": {
+            "type": "text",
+            "default": "",
+            "label": "Discord channel ID",
+            "when": {
+              "type": "discord"
+            }
+          },
+          "sendToDiscord": {
+            "type": "bool",
+            "default": true,
+            "label": "Forward game messages to Discord",
+            "when": {
+              "type": "discord"
+            }
+          }
+        }
+      },
+      "pattern": "^(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-4])$"
+    },
+    "tradeChannels": {
+      "type": "map",
+      "default": {},
+      "label": "Trade channel routes",
+      "description": "Add or remove numbered channel routes. Use channel numbers from 1 to 65534.",
+      "value": {
+        "type": "group",
+        "settings": {
+          "type": {
+            "type": "choice",
+            "default": "blank",
+            "label": "Route type",
+            "options": [
+              {
+                "value": "server",
+                "label": "Shared server"
+              },
+              {
+                "value": "discord",
+                "label": "Discord"
+              },
+              {
+                "value": "fake",
+                "label": "Simulated chat"
+              },
+              {
+                "value": "blank",
+                "label": "Local chat"
+              }
+            ]
+          },
+          "address": {
+            "type": "text",
+            "default": "",
+            "label": "Server address",
+            "when": {
+              "type": "server"
+            }
+          },
+          "port": {
+            "type": "integer",
+            "default": 6113,
+            "min": 1,
+            "max": 65535,
+            "label": "Server port",
+            "when": {
+              "type": "server"
+            }
+          },
+          "discordChannelId": {
+            "type": "text",
+            "default": "",
+            "label": "Discord channel ID",
+            "when": {
+              "type": "discord"
+            }
+          },
+          "sendToDiscord": {
+            "type": "bool",
+            "default": true,
+            "label": "Forward game messages to Discord",
+            "when": {
+              "type": "discord"
+            }
+          }
+        }
+      },
+      "pattern": "^(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-4])$"
+    },
+    "fallbackRoute": {
+      "type": "group",
+      "label": "Fallback channel route",
+      "description": "Apply this route to Global and Trade channels without an explicit route.",
+      "settings": {
+        "type": {
+          "type": "choice",
+          "default": "blank",
+          "label": "Route type",
+          "options": [
+            {
+              "value": "server",
+              "label": "Shared server"
+            },
+            {
+              "value": "discord",
+              "label": "Discord"
+            },
+            {
+              "value": "fake",
+              "label": "Simulated chat"
+            },
+            {
+              "value": "blank",
+              "label": "Local chat"
+            }
+          ]
+        },
+        "address": {
+          "type": "text",
+          "default": "",
+          "label": "Server address",
+          "when": {
+            "type": "server"
+          }
+        },
+        "port": {
+          "type": "integer",
+          "default": 6113,
+          "min": 1,
+          "max": 65535,
+          "label": "Server port",
+          "when": {
+            "type": "server"
+          }
+        },
+        "discordChannelId": {
+          "type": "text",
+          "default": "",
+          "label": "Discord channel ID",
+          "when": {
+            "type": "discord"
+          }
+        },
+        "sendToDiscord": {
+          "type": "bool",
+          "default": false,
+          "label": "Forward game messages to Discord",
+          "when": {
+            "type": "discord"
+          }
+        }
+      }
     }
   }
 }

@@ -1,10 +1,11 @@
 {
   "id": "globalchat",
   "name": "Global Chat",
-  "description": "Talk to other LocalExile players: global, trade and whisper chat go through the LocalExile global chat server.",
+  "description": "Talk to other LocalExile players through a shared chat server, with optional Discord and simulated chat routes.",
   "author": "JetStream",
-  "version": "1.1.4",
-  "compatibleClientVersions": ["0.4.3-beta", "0.5.0-beta", "0.5.1-beta", "0.5.2-beta"],
+  "version": "1.2.16",
+  "compatibleClientVersions": ["0.5.2-beta"],
   "kind": "feature",
+  "userSettingsFile": "globalchat.json",
   "depends": []
 }
