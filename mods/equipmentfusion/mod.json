@@ -3,7 +3,7 @@
   "name": "Equipment Fusion",
   "description": "Adds non-weapon skin-transfer donor attributes and defences automatically; requires the companion native skin-transfer server update.",
   "author": "JJ ouyang",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "compatibleClientVersions": ["0.5.2-beta"],
   "kind": "feature",
   "depends": ["Game"],

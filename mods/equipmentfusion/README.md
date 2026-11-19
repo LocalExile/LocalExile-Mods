@@ -8,6 +8,11 @@ When enabled, equipment with a native skin transfer automatically gains the dono
 defences. Each item retains its own modifiers, quality, sockets and gems. Use the game's skin-transfer picker and
 reclaim action; the GM tool only installs the mod, changes its switch and shows its actual load status.
 
+Choose the single **Skin Transfer**, rather than a similarly named pack, in the native microtransaction stash.
+The 3.29 client requires the donor's sockets to be empty before its picker accepts the donor; remove its gems first.
+The mod does not bypass that client restriction. Saved donors containing gems still retain them on reclaim, and those
+gems never supply stats, requirements or skills while the item is a donor.
+
 ## Scope
 
 - Body armour, helmets, gloves, boots, belts, amulets and rings contribute. Both weapon hands and the stored weapon sets
