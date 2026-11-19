@@ -50,6 +50,9 @@ No converter executable, client changes, credentials or game assets ship with th
 
 ## Strict converter source
 
+Version 1.0.4 corrects the native cluster-jewel theme index. Builds imported with an earlier converter need
+to be imported again to repair their saved cluster jewels; updating the frontend alone does not rewrite them.
+
 `Converter/PobImport.csproj` builds the separate, operator-configured .NET 10 converter from source.
 It requires LocalExile 0.5.2-beta or later (LocalExile/LocalExile#1013) for native item properties and game-owned import validation.
 The frontend release does not automatically build, install or run this source project.

@@ -3,7 +3,7 @@
   "name": "POB",
   "description": "Preview and import a character build through a configured external PoB converter.",
   "author": "nikolos89",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "compatibleClientVersions": ["0.4.3-beta", "0.5.0-beta", "0.5.1-beta", "0.5.2-beta"],
   "kind": "feature",
   "depends": [],

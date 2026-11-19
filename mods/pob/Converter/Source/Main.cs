@@ -419,7 +419,8 @@ static class Entry
         if (theme < 0) { warnings.Add($"Кластер '{title}': тема '{skill}' не найдена."); theme = 0; }
         if (count <= 0) warnings.Add($"Кластер '{title}': не найдено число пассивок.");
         var mods = (item.Mods ?? []).Where(m => m.Id != "JewelExpansionPassiveNodes").ToList();
-        mods.Insert(0, new CharacterSaves.SavedMod("JewelExpansionPassiveNodes", GameServer.Core.Protocol.Instance.ModSection.Enchant, [theme, count]));
+        // Zero means no theme; the native modifier stores the table row plus one.
+        mods.Insert(0, new CharacterSaves.SavedMod("JewelExpansionPassiveNodes", GameServer.Core.Protocol.Instance.ModSection.Enchant, [theme + 1, count]));
         return item with { Mods = mods };
     }
 
