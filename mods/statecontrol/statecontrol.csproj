@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- State Control: save and load a character and the stash, and stash and character tools (README.md). Everything else is
+       in Directory.Build.props. -->
+
+</Project>
