@@ -15,7 +15,9 @@ public sealed class EquipmentFusionMod : IMod, IDisposable
         public (byte Row, InventoryItem Item)[] Hosts = [];
         public IReadOnlyList<(byte Row, InventoryItem Item)> Sources = [];
     }
-    readonly ConditionalWeakTable<ClientState, Cached> _views = new();
+    readonly ConditionalWeakTable<ClientState, object> _views = new();
+    readonly Lock _cacheGate = new();
+    int _disposed;
     static readonly HashSet<byte> Slots = [1, 4, 5, 6, 7, 8, 9, 10, 102];
     static readonly HashSet<string> Classes = ["Body Armour", "Helmet", "Amulet", "Ring", "Gloves", "Boots", "Belt"];
 
@@ -24,11 +26,25 @@ public sealed class EquipmentFusionMod : IMod, IDisposable
     public IReadOnlyList<(byte Row, InventoryItem Item)> Sources(ClientState conn,
         IReadOnlyList<(byte Row, InventoryItem Item)> native)
     {
-        var cache = _views.GetOrCreateValue(conn);
+        if (Volatile.Read(ref _disposed) != 0) return Array.Empty<(byte, InventoryItem)>();
+        if (!_views.TryGetValue(conn, out var view))
+            lock (_cacheGate)
+            {
+                if (Volatile.Read(ref _disposed) != 0) return Array.Empty<(byte, InventoryItem)>();
+                if (!_views.TryGetValue(conn, out view)) _views.Add(conn, view = new Cached());
+            }
+        var cache = (Cached)view;
         lock (cache.Gate)
         {
-            if (cache.Hosts.Length == native.Count && cache.Hosts.Select((p, i) => p.Row == native[i].Row
-                && ReferenceEquals(p.Item, native[i].Item)).All(same => same)) return cache.Sources;
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                _views.Remove(conn);
+                return Array.Empty<(byte, InventoryItem)>();
+            }
+            bool same = cache.Hosts.Length == native.Count;
+            for (int i = 0; same && i < native.Count; i++)
+                same = cache.Hosts[i].Row == native[i].Row && ReferenceEquals(cache.Hosts[i].Item, native[i].Item);
+            if (same) return cache.Sources;
             cache.Sources = BuildSources(conn, native);
             cache.Hosts = [.. native];
             return cache.Sources;
@@ -46,22 +62,33 @@ public sealed class EquipmentFusionMod : IMod, IDisposable
                 || donor.SkinTransferSource is not null || target.Id >= 0x80000000u
                 || catalog.ByHash(target.Item.TypeHash) is not { } a || catalog.ByHash(donor.TypeHash) is not { } b
                 || !Classes.Contains(a.Class) || a.Class != b.Class) continue;
-            var projected = _sources.GetValue(target, host => new(0x80000000u | host.Id, 0, 0,
-                Project(host.Item.SkinTransferSource!, catalog.Mods)));
+            if (!_sources.TryGetValue(target, out var projected))
+                lock (_cacheGate)
+                    if (!_sources.TryGetValue(target, out projected))
+                    {
+                        projected = new(0x80000000u | target.Id, 0, 0, Project(donor, catalog.Mods));
+                        _sources.Add(target, projected);
+                    }
             result.Add((row, projected));
         }
         return result;
     }
 
     /// <summary>Only the calculation view changes. The native donor, including its sockets and all modifiers, is kept intact.</summary>
-    public static Item Project(Item donor, ModCatalog mods) => donor with
+    public static Item Project(Item donor, ModCatalog mods)
     {
-        Sockets = [], Links = null,
-        Mods = [.. donor.Mods.Select(mod => mods.ByHash(mod.Hash) is not { } row ? mod : mod with
+        var projected = new ItemMod[donor.Mods.Count];
+        for (int i = 0; i < projected.Length; i++)
         {
-            Values = [.. mod.Values.Select((value, index) => index < row.Stats.Count && SkillExecution(row.Stats[index].Id) ? 0 : value)],
-        })],
-    };
+            var mod = donor.Mods[i];
+            if (mods.ByHash(mod.Hash) is not { } row) { projected[i] = mod; continue; }
+            var values = new int[mod.Values.Count];
+            for (int index = 0; index < values.Length; index++)
+                values[index] = index < row.Stats.Count && SkillExecution(row.Stats[index].Id) ? 0 : mod.Values[index];
+            projected[i] = mod with { Values = values };
+        }
+        return donor with { Sockets = Array.Empty<ItemSocket>(), Links = null, Mods = projected };
+    }
 
     // Skill grants are never enumerated from ItemStatSources. These numeric execution controls also stay out of global stats.
     static bool SkillExecution(string id) => id.Contains("trigger", StringComparison.OrdinalIgnoreCase)
@@ -70,5 +97,9 @@ public sealed class EquipmentFusionMod : IMod, IDisposable
         || id.Contains("granted_skill", StringComparison.OrdinalIgnoreCase)
         || id.Contains("grants_skill", StringComparison.OrdinalIgnoreCase);
 
-    public void Dispose() { _views.Clear(); _sources.Clear(); }
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        lock (_cacheGate) { _views.Clear(); _sources.Clear(); }
+    }
 }
