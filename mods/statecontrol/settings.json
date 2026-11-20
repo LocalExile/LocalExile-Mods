@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "settings": {
+    "fillAmount": {
+      "type": "integer", "default": 1000, "min": 1, "max": 50000,
+      "label": "Fill amount",
+      "description": "How many of each item /fill_stash puts in a slot of a special tab (currency, fragments, essences and the like), up to the slot's own limit."
+    },
+    "questPassivePoints": {
+      "type": "integer", "default": 24, "min": 0, "max": 200,
+      "label": "Quest passive points",
+      "description": "The passive skill points /make_characters gives a new character for the campaign's quests: 22 from quests and 2 for killing all three bandits."
+    }
+  }
+}

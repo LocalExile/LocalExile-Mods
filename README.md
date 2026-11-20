@@ -54,6 +54,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [mapdrop](mods/mapdrop/) | Configurable bonus map rolls for eligible kills |
 | [pob](mods/pob/) | preview and import character builds through an external converter; requires LocalExile #639 |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
+| [statecontrol](mods/statecontrol/) | testing and practice tools: save and load characters and the stash, fill, add and remove stash tabs, make level 100 characters; requires LocalExile #1170 and #1172 |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to
