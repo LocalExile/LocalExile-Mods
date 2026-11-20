@@ -2,7 +2,7 @@
 
 Chat commands for testing and practice: keep a character and the stash as they are, change anything, and put them back.
 Also: fill the stash's special tabs with everything they hold, add and remove tabs of any kind, empty the stash, and make
-a level 100 character of every ascendancy. (It was called Save States; the states it kept then still load.)
+a level 100 character of every ascendancy.
 
 | Command | Does |
 |---|---|

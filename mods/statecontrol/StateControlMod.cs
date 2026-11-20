@@ -21,8 +21,7 @@ public sealed class StateControlMod : IMod
     sealed record CharacterState(Character Record, CharacterSaves.Save Save, DateTimeOffset At);
     sealed record StashState(AccountStash.Save Header, Dictionary<int, List<CharacterSaves.SavedPlacement>> Tabs, DateTimeOffset At);
 
-    // The keys keep the mod's first name (Save States), so the states kept before the rename still load.
-    const string CharacterKey = "mod/savestates/character/", StashKey = "mod/savestates/stash/", UndoKey = "mod/savestates/stash-undo/";
+    const string CharacterKey = "mod/statecontrol/character/", StashKey = "mod/statecontrol/stash/", UndoKey = "mod/statecontrol/stash-undo/";
     const int MostCharacters = 24;
 
     // The characters whose state goes in when they have left the game, by character id, with when /load_saves asked.
