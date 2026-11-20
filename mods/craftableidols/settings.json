@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "settings": {
+    "allowFracturing": {
+      "type": "bool",
+      "default": false,
+      "label": "Allow Fracturing Orb",
+      "description": "Let a Fracturing Orb fracture one random explicit modifier on a rare Idol with four explicit modifiers."
+    },
+    "allowVaal": {
+      "type": "bool",
+      "default": false,
+      "label": "Allow Vaal Orb",
+      "description": "Let a Vaal Orb corrupt an Idol (and let Tainted Chaos and Tainted Exalted Orbs modify corrupted rare Idols)."
+    },
+    "allowMirror": {
+      "type": "bool",
+      "default": false,
+      "label": "Allow Mirror of Kalandra",
+      "description": "Let a Mirror of Kalandra create a mirrored copy of a non-unique, uncorrupted Idol."
+    }
+  }
+}
