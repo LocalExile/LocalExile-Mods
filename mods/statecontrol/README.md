@@ -17,12 +17,14 @@ a level 100 character of every ascendancy. (It was called Save States; the state
 | `/remove_tab all confirm` | Removes every tab of this league's stash, with what is in them, and leaves one empty premium tab named `Stash`. `/load_saves undo` puts them back. |
 | `/make_characters [campaign]` | Makes one level 100 character of each ascendancy on the account (21, so the account needs that many free places), named `<Ascendancy>_100`, with its class's start items, the passive points of the campaign's quests and all eight ascendancy points to spend. With `campaign` they stand at the end of the story instead: the quest flags of the game's own epilogue start state, every waypoint, in Karui Shores. |
 
-A state is kept in the save database, beside the saves, so it lasts across restarts. The stash's change shows when you
-enter another area or log in again; `/fill_stash` shows at once.
+A state is kept in the save database, beside the saves, so it lasts across restarts. A loaded stash puts back only its
+tabs and their items: the league's gold, its quest flags (the trials every character shares) and other mods' data stay as
+they are now. The stash's change shows at once.
 
 **Loading the character you play.** A character in game cannot be written over: its connection saves once more when it
 ends. `/load_saves` therefore ends the connection, and the state goes in after that last save, at LocalExile's
-`CharacterAtRest` event, before you select the character again.
+`CharacterAtRest` event, before you select the character again. When that last save fails, or the connection takes more than two
+minutes to end, the character is left as it is and the log says so: run `/load_saves` again.
 
 ## Settings
 
@@ -31,6 +33,6 @@ ends. `/load_saves` therefore ends the connection, and the state goes in after t
 | `fillAmount` | 1000 | How many of each item `/fill_stash` puts in a slot. |
 | `questPassivePoints` | 24 | The passive points `/make_characters` gives for the campaign's quests (22 from quests, 2 for killing the bandits). |
 
-Works with: 1.0.0 needs two LocalExile changes: the `CharacterAtRest` event
+Works with LocalExile 0.5.3-beta and later: it needs the `CharacterAtRest` event
 ([#1172](https://github.com/LocalExile/LocalExile/pull/1172)) and stash tab removal
 ([#1170](https://github.com/LocalExile/LocalExile/pull/1170)).

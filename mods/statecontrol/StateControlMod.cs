@@ -25,8 +25,10 @@ public sealed class StateControlMod : IMod
     const string CharacterKey = "mod/savestates/character/", StashKey = "mod/savestates/stash/", UndoKey = "mod/savestates/stash-undo/";
     const int MostCharacters = 24;
 
-    // The characters whose state goes in when they have left the game, by character id.
-    readonly ConcurrentDictionary<Guid, CharacterState> _pending = new();
+    // The characters whose state goes in when they have left the game, by character id, with when /load_saves asked.
+    // CharacterAtRest does not run when the last save failed: a state older than this is dropped, not loaded at a later logout.
+    readonly ConcurrentDictionary<Guid, (CharacterState State, DateTimeOffset Asked)> _pending = new();
+    static readonly TimeSpan PendingFor = TimeSpan.FromMinutes(2);
     Choices _choices = new(1000, 24);
     Action<string> _log = _ => { };
 
@@ -40,8 +42,10 @@ public sealed class StateControlMod : IMod
         _log = mod.Log;
         GameEvents.CharacterAtRest.Add(id, conn =>
         {
-            if (conn.CharacterId is { } character && _pending.TryRemove(character, out var state))
-                _log(Restore(state) is { } why ? $"{state.Record.Name}: not loaded at rest: {why}" : $"{state.Record.Name}: state of {state.At:u} loaded");
+            if (conn.CharacterId is not { } character || !_pending.TryRemove(character, out var pending)) return Task.CompletedTask;
+            var state = pending.State;
+            if (DateTimeOffset.UtcNow - pending.Asked > PendingFor) _log($"{state.Record.Name}: state of {state.At:u} not loaded: /load_saves was {pending.Asked:u}, before its last save");
+            else _log(Restore(state) is { } why ? $"{state.Record.Name}: not loaded at rest: {why}" : $"{state.Record.Name}: state of {state.At:u} loaded");
             return Task.CompletedTask;
         });
         GameEvents.CommandsBuilding.Add(id, AddCommands);
@@ -80,25 +84,33 @@ public sealed class StateControlMod : IMod
             string key = StashOf(conn);
             if (args.Length > 0 && args[0].Equals("undo", StringComparison.OrdinalIgnoreCase))
             {
-                await conn.Commands!.Reply(LoadStash(key, UndoKey + key, keepUndo: false) is int undone
-                    ? $"State Control: the stash is as it was before ({undone} item(s)). Enter another area or log in again to see it."
+                int? undone = LoadStash(key, UndoKey + key, keepUndo: false);
+                if (undone is not null) await ShowStashAgain(remote, stream, ciphers, conn);
+                await conn.Commands!.Reply(undone is not null
+                    ? $"State Control: the stash is as it was before ({undone} item(s))."
                     : "State Control: nothing to undo.");
                 return;
             }
             if (conn.CharacterId is not { } id || Accounts.GetCharacter(id) is not { } record) { await conn.Commands!.Reply("State Control: this character has no account record."); return; }
             var told = new List<string>();
-            if (LoadStash(key, StashKey + key, keepUndo: true) is int items) told.Add($"stash ({items} item(s))");
+            int? items = LoadStash(key, StashKey + key, keepUndo: true);
+            if (items is not null) told.Add($"stash ({items} item(s))");
             bool leaving = false;
             foreach (var other in Accounts.CharactersOf(record.AccountId))
             {
                 if (Saves.Db.GetMeta(CharacterKey + other.Id.ToString("N")) is not { } text || JsonSerializer.Deserialize<CharacterState>(text, Json) is not { } state) continue;
-                if (other.Id == id) { _pending[id] = state; leaving = true; told.Add(other.Name); }
+                if (other.Id == id) { _pending[id] = (state, DateTimeOffset.UtcNow); leaving = true; told.Add(other.Name); }
                 else if (Program.InGame.Keys.Any(c => c.CharacterId == other.Id && !c.Closed)) told.Add($"{other.Name} (in game elsewhere: not loaded)");
                 else told.Add(Restore(state) is { } why ? $"{other.Name} (not loaded: {why})" : other.Name);
             }
             if (told.Count == 0) { await conn.Commands!.Reply("State Control: nothing is saved yet (/save_character, /save_stash)."); return; }
             _log($"{record.Name}: loading {string.Join(", ", told)}");
-            if (!leaving) { await conn.Commands!.Reply($"State Control: loaded {string.Join(", ", told)}. Enter another area or log in again to see the stash."); return; }
+            if (!leaving)
+            {
+                if (items is not null) await ShowStashAgain(remote, stream, ciphers, conn);
+                await conn.Commands!.Reply($"State Control: loaded {string.Join(", ", told)}.");
+                return;
+            }
             // This character's own state waits for its connection's last save: the connection ends now, and is not
             // waited for here, where it would wait for this very command.
             _ = Program.EndAsync(conn, "save states loaded", $"State Control: loaded {string.Join(", ", told)}. Select your character again.");
@@ -117,7 +129,8 @@ public sealed class StateControlMod : IMod
                 return Count(state);
             });
             _log($"stash {key}: {(removed < 0 ? "nothing to clear" : $"{removed} item(s) cleared")}");
-            await conn.Commands!.Reply(removed < 0 ? "State Control: the stash has not been opened yet." : $"State Control: {removed} item(s) removed from the stash. Enter another area or log in again to see it; /load_saves undo puts them back.");
+            if (removed >= 0) await ShowStashAgain(remote, stream, ciphers, conn);
+            await conn.Commands!.Reply(removed < 0 ? "State Control: the stash has not been opened yet." : $"State Control: {removed} item(s) removed from the stash; /load_saves undo puts them back.");
         })
         .Add("fill_stash", "/fill_stash [amount] (State Control: put every item its special stash tabs hold into them: currency, fragments, essences, cards, uniques, gems, flasks and the rest)", async args =>
         {
@@ -127,6 +140,8 @@ public sealed class StateControlMod : IMod
             var lines = new List<string>();
             for (int tab = 0; tab < stash.Count; tab++) if (stash.IsShownTab(tab)) lines.AddRange(await Fill(remote, stream, ciphers, conn, stash, tab, amount));
             lines.AddRange(FillUniqueTabs(conn));
+            // The tabs it added (gems, uniques) are in the client's tab list only once the list goes out again.
+            await Game.SendTabListAgain(remote, stream, ciphers, conn, InstanceStash.Personal);
             await conn.Commands!.Reply(lines.Count == 0 ? "State Control: the stash has no special tabs." : $"State Control: {string.Join("; ", lines)}.");
         })
         .Add("add_tab", "/add_tab <type> [count] [name] (State Control: add stash tabs of any type: " + string.Join(", ", TabTypes.Keys) + "; /add_tab list shows them)", async args =>
@@ -300,11 +315,30 @@ public sealed class StateControlMod : IMod
     static int? LoadStash(string key, string from, bool keepUndo) => Saves.Atomically<int?>(() =>
     {
         if (Saves.Db.GetMeta(from) is not { Length: > 0 } text || JsonSerializer.Deserialize<StashState>(text, Json) is not { } state) return null;
-        if (keepUndo && ReadStash(key) is { } current) Saves.Db.SetMeta(UndoKey + key, JsonSerializer.Serialize(current, Json));
+        var current = ReadStash(key);
+        if (keepUndo && current is not null) Saves.Db.SetMeta(UndoKey + key, JsonSerializer.Serialize(current, Json));
         else if (!keepUndo) Saves.Db.SetMeta(from, "");
+        // Only the tabs go back. The rest of the header is the league's as it is now: its quest flags (every character's
+        // trials), gold, other mods' data, and the next item id, which never goes back, or new items would reuse ids.
+        if (current is not null)
+            state = state with { Header = current.Header with { Tabs = state.Header.Tabs, LastTab = state.Header.LastTab,
+                NextItemId = Math.Max(current.Header.NextItemId, state.Header.NextItemId) } };
         WriteStash(key, state);
         return Count(state);
     });
+
+    /// <summary>After the stash was replaced in the database: the client drops every tab it has loaded (S→C 0xc1) and gets
+    /// the tab list again with them marked not loaded, so the panel asks for each (0xc7) as it shows it, as after a tab
+    /// switch (Game.SendStashTab).</summary>
+    static async Task ShowStashAgain(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    {
+        var stash = Game.PersonalStashOf(conn);
+        foreach (int tab in conn.StashTabsSent.ToArray())
+            await Program.Send(remote, stream, ciphers, InstanceInventories.RemoveInventory(stash.InventoryOf(tab)),
+                $"0x00c1 unload stash tab {tab} inventory {stash.InventoryOf(tab)} (State Control: the stash was replaced)");
+        conn.StashTabsSent.Clear();
+        await Game.SendTabListAgain(remote, stream, ciphers, conn, InstanceStash.Personal);
+    }
 
     /// <summary>The tab kinds /add_tab makes: a StashType row (AccountStash.Types), the name new tabs get, and a colour.</summary>
     static readonly Dictionary<string, (byte Id, string Name, (byte, byte, byte) Colour)> TabTypes = new(StringComparer.OrdinalIgnoreCase)
