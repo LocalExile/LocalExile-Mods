@@ -2,11 +2,15 @@
 
 Lets crafting currencies modify Legacy of Phrecia Idols (`AtlasRelic`) on the server, bypassing their `Unmodifiable` class restriction.
 
-It is a script mod that depends on `Game` and requires no changes to LocalExile.
+It is a script mod that depends on `Game` and requires no changes to LocalExile. It starts disabled: turn it on in
+Waypoint or with `/mod_enable craftableidols`.
+
+Idols cannot be crafted on the official servers, so this is a custom rule, not a replica: the Vaal and Mirror rules
+and odds below are the mod's own.
 
 ## How it works
 
-On the official 3.29.3c client, the red **Unmodifiable** line on an Idol's tooltip is read directly from the client's local `Data/ItemClasses.dat` table (`AtlasRelic`, row 94), not from a server packet, so a server-side mod cannot hide that tooltip line. However, the client still sends currency application packets (`C→S 0x0071` and Shift-repeat `0x0072`) when you right-click an orb and click an Idol.
+On the client, the red **Unmodifiable** line on an Idol's tooltip is read directly from the client's local `Data/ItemClasses.dat` table (`AtlasRelic`, row 94), not from a server packet, so a server-side mod cannot hide that tooltip line. However, the client still sends currency application packets (`C→S 0x0071` and Shift-repeat `0x0072`) when you right-click an orb and click an Idol.
 
 Craftable Idols intercepts those packets for `AtlasRelic` items across your main inventory, stash tabs (including the Currency Stash Tab crafting slot) and the Atlas Idol side panel, and applies the server's own Idol modifier pool (`Mods` domain 37) with Idol affix limits (1 prefix / 1 suffix on magic, 2 prefixes / 2 suffixes and 3–4 affixes on rare).
 
@@ -48,4 +52,4 @@ Configured in Waypoint or `data/mods/craftableidols.json`:
 
 ## Compatibility
 
-- LocalExile: builds with `0.5.2-beta` and later; intended for LocalExile builds that include the Phrecia `Idols` module (`Modules/Legacy/Idols`, merged on `main` after `0.5.2-beta`).
+- LocalExile: `0.5.3-beta`, the first release with the Phrecia `Idols` module (`Modules/Legacy/Idols`).

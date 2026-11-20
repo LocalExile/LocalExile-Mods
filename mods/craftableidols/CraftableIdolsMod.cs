@@ -184,13 +184,8 @@ public sealed class CraftableIdolsMod : IMod
 
         var rolls = Game.RollsFor(conn);
         var uniques = Game.UniquesFor(conn);
-        var random = target.Item.Foreseeing ? ItemRolls.ForeseeRandom(target.Item, used.Item.TypeHash) : Random.Shared;
-        Item? result = ApplyCurrency(kind, catalog, rolls, uniques, targetType, target.Item, random);
-        if (result is not null && target.Item.Foreseeing)
-        {
-            conn.ForesightRequest = null;
-            result = ItemRolls.ClearForesee(result);
-        }
+        // No Hinekora's Lock here: the server refuses to lock an unmodifiable base, so an Idol is never foreseeing.
+        Item? result = ApplyCurrency(kind, catalog, rolls, uniques, targetType, target.Item, Random.Shared);
 
         if (result is null)
         {
