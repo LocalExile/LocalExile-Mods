@@ -1,0 +1,11 @@
+{
+  "id": "craftableidols",
+  "name": "Craftable Idols",
+  "description": "Lets crafting currencies modify Phrecia Idols on the server, bypassing their Unmodifiable class restriction.",
+  "author": "mrnamwen",
+  "version": "1.0.0",
+  "compatibleClientVersions": ["0.5.3-beta"],
+  "kind": "feature",
+  "depends": ["Game"],
+  "enabled": false
+}
