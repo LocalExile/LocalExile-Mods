@@ -8,11 +8,17 @@ public sealed class PetLootMod : IMod
     public sealed record Profile(bool Enabled, bool Gold, int Range, bool CommonCurrency, Dictionary<string, int> Rules)
     {
         public double MovementSpeed { get; init; } = 2;
+        public bool AllCurrency { get; init; }
+        public bool DivinationCards { get; init; }
+        public bool MapFragments { get; init; }
     }
     public sealed record Choices(bool Enabled, bool Gold, int Range, bool CommonCurrency,
         Dictionary<string, int> Rules, Dictionary<string, Profile> Profiles)
     {
         public double MovementSpeed { get; init; } = 2;
+        public bool AllCurrency { get; init; }
+        public bool DivinationCards { get; init; }
+        public bool MapFragments { get; init; }
     }
 
     static readonly HashSet<string> Common = new(StringComparer.OrdinalIgnoreCase)
@@ -71,7 +77,10 @@ public sealed class PetLootMod : IMod
         lock (choicesGate)
             return choices.Profiles.GetValueOrDefault(Key(conn))
                 ?? new(choices.Enabled, choices.Gold, choices.Range, choices.CommonCurrency, choices.Rules)
-                    { MovementSpeed = choices.MovementSpeed };
+                    {
+                        MovementSpeed = choices.MovementSpeed, AllCurrency = choices.AllCurrency,
+                        DivinationCards = choices.DivinationCards, MapFragments = choices.MapFragments,
+                    };
     }
 
     sealed record Candidate(uint Id, WorldItemObject Item, ItemCatalog.BaseType Type);
@@ -94,7 +103,7 @@ public sealed class PetLootMod : IMod
             var pos = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
             var items = Game.ItemsFor(conn);
             var nearby = new List<Candidate>();
-            foreach (var (id, item) in conn.Instance.Ground.Within(pos.X, pos.Y, Math.Clamp(profile.Range, 5, 80), _ => true))
+            foreach (var (id, item) in conn.Instance.Ground.Within(pos.X, pos.Y, Math.Clamp(profile.Range, 5, 100), _ => true))
                 if (Visible(conn, id) && items.ByHash(item.Item.TypeHash) is { } type)
                     nearby.Add(new(id, item, type));
             return nearby.ToArray();
@@ -108,7 +117,17 @@ public sealed class PetLootMod : IMod
             || (gold ? !profile.Gold : drop.Type.MaxStack <= 1)) return false;
         if (!profile.Rules.TryGetValue(drop.Type.Id, out int minimum)
             && !profile.Rules.TryGetValue(drop.Type.Name, out minimum))
-            minimum = gold || profile.CommonCurrency && Common.Contains(drop.Type.Name) ? 1 : 0;
+        {
+            bool selected = gold || profile.CommonCurrency && Common.Contains(drop.Type.Name)
+                || drop.Type.Class switch
+                {
+                    "StackableCurrency" => profile.AllCurrency,
+                    "DivinationCard" => profile.DivinationCards,
+                    "MapFragment" => profile.MapFragments,
+                    _ => false,
+                };
+            minimum = selected ? 1 : 0;
+        }
         return minimum > 0 && drop.Item.Item.StackSize >= minimum;
     }
 
@@ -132,12 +151,19 @@ public sealed class PetLootMod : IMod
             foreach (uint old in state.RetryAfter.Where(e => e.Value <= state.Seconds).Select(e => e.Key).ToArray())
                 state.RetryAfter.Remove(old);
             var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-            var candidates = Nearby(conn, profile).Where(i => Accept(i, profile) && !state.RetryAfter.ContainsKey(i.Id));
-            var drop = state.Item is uint target ? candidates.FirstOrDefault(i => i.Id == target)
-                : candidates.MinBy(i => Distance(at.X, at.Y, i.Item.GridX, i.Item.GridY));
+            Candidate? matching = null, nearest = null;
+            double nearestDistance = double.PositiveInfinity;
+            foreach (var candidate in Nearby(conn, profile))
+            {
+                if (!Accept(candidate, profile) || state.RetryAfter.ContainsKey(candidate.Id)) continue;
+                if (candidate.Id == state.Item) { matching = candidate; break; }
+                double distance = Distance(at.X, at.Y, candidate.Item.GridX, candidate.Item.GridY);
+                if (distance < nearestDistance) { nearestDistance = distance; nearest = candidate; }
+            }
+            var drop = matching ?? nearest;
             if (drop is null) { await Release(conn, state); return; }
             var to = (X: drop.Item.GridX, Y: drop.Item.GridY);
-            if (state.Item is null)
+            if (matching is null)
             {
                 double now = conn.Clock.Elapsed.TotalSeconds;
                 lock (conn.Pets)
@@ -159,7 +185,7 @@ public sealed class PetLootMod : IMod
                     var current = ProfileOf(conn);
                     double now = conn.Clock.Elapsed.TotalSeconds;
                     var owner = conn.Walk.Position(now); var collector = pet.Walk.Position(now);
-                    if (Accept(drop, current) && Distance(owner.X, owner.Y, to.X, to.Y) <= Math.Clamp(current.Range, 5, 80))
+                    if (Accept(drop, current) && Distance(owner.X, owner.Y, to.X, to.Y) <= Math.Clamp(current.Range, 5, 100))
                     {
                         if (Distance(collector.X, collector.Y, to.X, to.Y) <= 2)
                             pickup = Game.TakeGroundStack(conn, drop.Id, drop.Item);
@@ -168,8 +194,12 @@ public sealed class PetLootMod : IMod
                 }
             }
             if (pickup is not null)
+            {
+                state.Item = null;
                 await Game.SendPickup(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, conn, drop.Id, pickup);
-            else state.RetryAfter[drop.Id] = state.Seconds + 2;
+                return;
+            }
+            state.RetryAfter[drop.Id] = state.Seconds + 2;
             await Release(conn, state);
         }
         finally { state.Gate.Release(); }
@@ -189,9 +219,9 @@ public sealed class PetLootMod : IMod
             if (action is "status" or "list")
             {
                 string rules = string.Join(", ", profile.Rules.OrderBy(r => r.Key).Select(r => $"{r.Key}: {(r.Value == 0 ? "blocked" : "min " + r.Value)}"));
-                await conn.Commands!.Reply($"Pet Loot: {(profile.Enabled ? "on" : "paused")}; gold {profile.Gold}; common currency {profile.CommonCurrency}; range {profile.Range}; pet speed {profile.MovementSpeed.ToString(System.Globalization.CultureInfo.InvariantCulture)}x.\n"
+                await conn.Commands!.Reply($"Pet Loot: {(profile.Enabled ? "on" : "paused")}; gold {profile.Gold}; common currency {profile.CommonCurrency}; all currency {profile.AllCurrency}; cards {profile.DivinationCards}; fragments {profile.MapFragments}; range {profile.Range}; pet speed {profile.MovementSpeed.ToString(System.Globalization.CultureInfo.InvariantCulture)}x.\n"
                     + $"Overrides: {(rules.Length == 0 ? "none" : rules)}\n"
-                    + "/petloot on|off|toggle; gold|common on|off; range 5-80; speed 0.25-10; allow <item> [minimum]; block|remove <item>; nearby; reset");
+                    + "/petloot on|off|toggle; gold|common on|off; range 5-100; speed 0.25-10; allow <item> [minimum]; block|remove <item>; nearby; reset");
                 return;
             }
             if (action == "nearby")
@@ -204,7 +234,7 @@ public sealed class PetLootMod : IMod
                 profile = profile with { Enabled = action == "on" || action == "toggle" && !profile.Enabled };
             else if (action is "gold" or "common" && args.Length == 2 && args[1] is "on" or "off")
                 profile = action == "gold" ? profile with { Gold = args[1] == "on" } : profile with { CommonCurrency = args[1] == "on" };
-            else if (action == "range" && args.Length == 2 && int.TryParse(args[1], out int range) && range is >= 5 and <= 80)
+            else if (action == "range" && args.Length == 2 && int.TryParse(args[1], out int range) && range is >= 5 and <= 100)
                 profile = profile with { Range = range };
             else if (action == "speed")
             {
