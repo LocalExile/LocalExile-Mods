@@ -50,6 +50,8 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [petloot](mods/petloot/) | optional pet pickup with per-character filters, minimum stacks, pause/resume and configurable 2x pet speed |
 | [zoom](mods/zoom/) | a wider view in normal play: the camera stands further back, the mouse wheel reaches it, `/zoom` sets how far |
 | [itemquantity](mods/itemquantity/) | 10× as many item drops |
+| [currencyloot](mods/currencyloot/) | Configurable bonus currency per eligible kill |
+| [mapdrop](mods/mapdrop/) | Configurable bonus map rolls for eligible kills |
 | [pob](mods/pob/) | preview and import character builds through an external converter; requires LocalExile #639 |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
 | [statecontrol](mods/statecontrol/) | testing and practice tools: save and load characters and the stash, fill, add and remove stash tabs, make level 100 characters; requires LocalExile #1170 and #1172 |

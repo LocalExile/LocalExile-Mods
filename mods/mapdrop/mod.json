@@ -1,0 +1,11 @@
+{
+  "id": "mapdrop",
+  "name": "Map Drop",
+  "description": "Adds configurable bonus map drops in Atlas maps and optionally in the late campaign.",
+  "author": "zj1022",
+  "version": "1.0.0",
+  "compatibleClientVersions": ["0.5.2-beta"],
+  "kind": "feature",
+  "depends": [],
+  "enabled": false
+}

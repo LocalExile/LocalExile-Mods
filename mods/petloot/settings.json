@@ -16,7 +16,7 @@
       "type": "integer",
       "default": 60,
       "min": 5,
-      "max": 80,
+      "max": 100,
       "label": "Pickup radius",
       "unit": "cells"
     },
@@ -60,7 +60,7 @@
             "type": "integer",
             "default": 60,
             "min": 5,
-            "max": 80,
+            "max": 100,
             "label": "Pickup radius",
             "unit": "cells"
           },
@@ -89,6 +89,21 @@
             "format": "multiplier",
             "label": "Pet movement speed",
             "description": "Multiplier for following, collecting and returning; 1 is normal speed, 2 is double speed."
+          },
+          "allCurrency": {
+            "type": "bool",
+            "default": false,
+            "label": "All stackable currency"
+          },
+          "divinationCards": {
+            "type": "bool",
+            "default": false,
+            "label": "Stackable divination cards"
+          },
+          "mapFragments": {
+            "type": "bool",
+            "default": false,
+            "label": "Stackable map fragments"
           }
         }
       }
@@ -101,6 +116,21 @@
       "format": "multiplier",
       "label": "Pet movement speed",
       "description": "Multiplier for following, collecting and returning; 1 is normal speed, 2 is double speed."
+    },
+    "allCurrency": {
+      "type": "bool",
+      "default": false,
+      "label": "All stackable currency"
+    },
+    "divinationCards": {
+      "type": "bool",
+      "default": false,
+      "label": "Stackable divination cards"
+    },
+    "mapFragments": {
+      "type": "bool",
+      "default": false,
+      "label": "Stackable map fragments"
     }
   }
 }
