@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "settings": {
+    "quantity": {
+      "type": "number", "default": 1, "min": 0, "max": 100, "step": 0.01, "format": "multiplier",
+      "label": "Item quantity", "description": "How many times as many items every kill drops."
+    },
+    "rarity": {
+      "type": "number", "default": 1, "min": 0, "max": 100, "step": 0.01, "format": "multiplier",
+      "label": "Item rarity", "description": "How many times as often dropped equipment is magic, rare or unique."
+    },
+    "gold": {
+      "type": "number", "default": 1, "min": 0, "max": 100, "step": 0.01, "format": "multiplier",
+      "label": "Gold", "description": "How many times as much gold every kill drops."
+    },
+    "maps": {
+      "type": "number", "default": 1, "min": 0, "max": 100, "step": 0.01, "format": "multiplier",
+      "label": "Map drop chance", "description": "How many times as often a kill drops a map."
+    },
+    "kinds": {
+      "type": "group",
+      "label": "Item kinds",
+      "description": "How often each kind is chosen for a dropped item, against the others. 0 stops that kind dropping.",
+      "settings": {
+        "currency": { "type": "number", "default": 1, "min": 0, "max": 100, "step": 0.01, "format": "multiplier", "label": "Currency" },
+        "gems": { "type": "number", "default": 1, "min": 0, "max": 100, "step": 0.01, "format": "multiplier", "label": "Gems" },
+        "flasks": { "type": "number", "default": 1, "min": 0, "max": 100, "step": 0.01, "format": "multiplier", "label": "Flasks" },
+        "equipment": { "type": "number", "default": 1, "min": 0, "max": 100, "step": 0.01, "format": "multiplier", "label": "Equipment" }
+      }
+    },
+    "mapExtras": {
+      "type": "group",
+      "label": "Cards and scarabs in maps",
+      "description": "How many times as often a map kill rolls its base divination card and scarab drop. The map's own modifiers add to it.",
+      "settings": {
+        "cards": { "type": "number", "default": 1, "min": 0, "max": 1000, "step": 0.01, "format": "multiplier", "label": "Divination cards" },
+        "scarabs": { "type": "number", "default": 1, "min": 0, "max": 1000, "step": 0.01, "format": "multiplier", "label": "Scarabs" }
+      }
+    },
+    "items": {
+      "type": "map",
+      "label": "Single items",
+      "description": "How many times as likely one currency, divination card or scarab is against the others of its kind. 0 stops it dropping. Other items are ignored.",
+      "source": "item",
+      "default": {},
+      "maxItems": 200,
+      "value": { "type": "number", "min": 0, "max": 1000000, "step": 0.01 }
+    }
+  }
+}
