@@ -27,10 +27,11 @@ gems never supply stats, requirements or skills while the item is a donor.
 
 ## Required server update
 
-This is a dependency draft. It requires the companion LocalExile native skin-transfer implementation and the general
-`GameEvents.ItemStatSources` interface. **An unmodified LocalExile 0.5.2-beta release does not support this mod.**
-The manifest's 0.5.2-beta is the repository-required provisional review baseline, not a release compatibility claim.
-The maintainer must set the first release containing the prerequisite before merging or publishing.
+Requires LocalExile's native skin-transfer implementation and the general `GameEvents.ItemStatSources` interface,
+merged in [LocalExile #1155](https://github.com/LocalExile/LocalExile/pull/1155). Build against a `main` checkout that
+contains that update. **An unmodified LocalExile 0.5.2-beta release does not support this mod.** The manifest's
+0.5.2-beta remains the repository-required provisional review baseline until the maintainer selects the shipping
+release; it is not a release compatibility claim. Set the first release containing the update before merging or publishing.
 
 Build with `dotnet build mods/equipmentfusion/equipmentfusion.csproj -p:LocalExileRoot=<matching-checkout>`.
 Install the output in `Mods/Binaries/equipmentfusion/` of that matching server. It starts disabled.
