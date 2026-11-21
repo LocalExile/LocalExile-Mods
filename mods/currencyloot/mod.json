@@ -1,0 +1,11 @@
+{
+  "id": "currencyloot",
+  "name": "Currency Loot",
+  "description": "Adds configurable bonus rolls for specific currencies on monster kills.",
+  "author": "zj1022",
+  "version": "1.0.0",
+  "compatibleClientVersions": ["0.5.2-beta"],
+  "kind": "feature",
+  "depends": [],
+  "enabled": false
+}

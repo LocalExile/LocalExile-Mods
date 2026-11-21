@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "settings": {
+    "items": {
+      "type": "map",
+      "label": "Bonus currency per kill",
+      "description": "Use the exact currency name or metadata ID. For example, 0.05 gives one additional item on 5% of eligible kills.",
+      "default": { "Chaos Orb": 0.05 },
+      "maxItems": 40,
+      "value": { "type": "number", "min": 0, "max": 20 }
+    }
+  }
+}

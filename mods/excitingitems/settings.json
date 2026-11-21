@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "settings": {
+    "implicits": {
+      "type": "group",
+      "label": "Unique implicits",
+      "description": "A dropped item gets a unique item's modifier as an extra implicit.",
+      "settings": {
+        "chance": {
+          "type": "integer",
+          "default": 1000,
+          "min": 1,
+          "max": 100000000,
+          "label": "One implicit: 1 in",
+          "description": "The chance of one unique implicit, as 1 in this many drops."
+        },
+        "chanceTwo": {
+          "type": "integer",
+          "default": 100000,
+          "min": 1,
+          "max": 100000000,
+          "label": "Two implicits: 1 in"
+        },
+        "chanceThree": {
+          "type": "integer",
+          "default": 1000000,
+          "min": 1,
+          "max": 100000000,
+          "label": "Three implicits: 1 in"
+        },
+        "mode": {
+          "type": "choice",
+          "default": "wild",
+          "options": [
+            {
+              "value": "wild",
+              "label": "Wild: any modifier on any gear"
+            },
+            {
+              "value": "sanity",
+              "label": "Sanity: only modifiers of uniques of the same kind of item"
+            },
+            {
+              "value": "thematic",
+              "label": "Thematic: modifiers that suit the slot"
+            }
+          ],
+          "label": "Which modifiers can come",
+          "description": "Thematic: offence on weapons, quivers and gloves; defence on body armours and shields; speed and ailments on boots; defence and scaling (per charge, per stat, auras) on helmets; utility and odd unique effects on rings, amulets and belts. Jewels get unique jewels' modifiers in every mode, and gear never gets those."
+        },
+        "rarityWeights": {
+          "type": "bool",
+          "default": true,
+          "label": "Rarer uniques, rarer modifiers",
+          "description": "A modifier of a rare unique (a Mageblood) comes up as seldom as that unique drops. Off: every modifier alike."
+        },
+        "rarities": {
+          "type": "choices",
+          "default": [
+            "magic",
+            "rare",
+            "unique"
+          ],
+          "options": [
+            {
+              "value": "magic",
+              "label": "Magic"
+            },
+            {
+              "value": "rare",
+              "label": "Rare"
+            },
+            {
+              "value": "unique",
+              "label": "Unique"
+            }
+          ],
+          "label": "Drops that can get them"
+        }
+      }
+    },
+    "empowered": {
+      "type": "group",
+      "label": "Empowered modifier",
+      "description": "One of the drop's modifiers, implicit or explicit (a unique implicit included), rolls higher than it can: its value times 1.1 to 2.",
+      "settings": {
+        "chance": {
+          "type": "integer",
+          "default": 500,
+          "min": 1,
+          "max": 100000000,
+          "label": "Chance: 1 in"
+        },
+        "percent": {
+          "type": "range",
+          "of": "integer",
+          "default": [
+            10,
+            100
+          ],
+          "min": 1,
+          "max": 1000,
+          "unit": "%",
+          "label": "How much stronger",
+          "description": "Picked at random in this range for each empowered modifier."
+        },
+        "rarities": {
+          "type": "choices",
+          "default": [
+            "magic",
+            "rare",
+            "unique"
+          ],
+          "options": [
+            {
+              "value": "magic",
+              "label": "Magic"
+            },
+            {
+              "value": "rare",
+              "label": "Rare"
+            },
+            {
+              "value": "unique",
+              "label": "Unique"
+            }
+          ],
+          "label": "Drops that can get it"
+        }
+      }
+    },
+    "extraModifier": {
+      "type": "group",
+      "label": "Extra fractured modifier",
+      "description": "The drop gets one modifier more than it could have: a rare 7 (a rare jewel 5), a magic item 3, a unique one rare-style prefix or suffix. Its side (prefixes or suffixes) is fractured.",
+      "settings": {
+        "chance": {
+          "type": "integer",
+          "default": 1000,
+          "min": 1,
+          "max": 100000000,
+          "label": "Chance: 1 in"
+        },
+        "rarities": {
+          "type": "choices",
+          "default": [
+            "magic",
+            "rare",
+            "unique"
+          ],
+          "options": [
+            {
+              "value": "magic",
+              "label": "Magic"
+            },
+            {
+              "value": "rare",
+              "label": "Rare"
+            },
+            {
+              "value": "unique",
+              "label": "Unique"
+            }
+          ],
+          "label": "Drops that can get it"
+        },
+        "influencedMods": {
+          "type": "bool",
+          "default": true,
+          "label": "Influenced modifiers too",
+          "description": "The extra modifier (and the ones that fill the item first) can also be one that only an influenced item rolls: one influence the item does not have is picked, and its modifiers for this base and item level join the pool. The item does not become influenced."
+        }
+      }
+    },
+    "blacklist": {
+      "type": "list",
+      "item": {
+        "type": "text",
+        "minLength": 1
+      },
+      "default": [
+        "LevelRequirementOverride",
+        "RemoveStats",
+        "LocalNoWhiteSockets",
+        "stat:in_radius",
+        "stat:jewel_radius",
+        "stat:radius_jewel",
+        "stat:alternate_tree",
+        "stat:variable_ring",
+        "stat:_index",
+        "stat:unique_jewel",
+        "stat:allocated",
+        "stat:notable",
+        "stat:cluster_jewel",
+        "stat:local_unique_",
+        "class:LifeFlask",
+        "class:ManaFlask",
+        "class:HybridFlask",
+        "class:UtilityFlask",
+        "class:Tincture",
+        "class:MapKey",
+        "class:AtlasRelic",
+        "class:Relic",
+        "class:SanctumRelic"
+      ],
+      "label": "Modifiers never used as implicits",
+      "description": "A Mods id or the start of one (LevelRequirementOverride), stat: and a piece of a stat id (stat:in_radius), or class: and a kind of item whose uniques' modifiers stay with it (class:UtilityFlask). The defaults are modifiers tied to their own item: radius jewels and tree effects, granted supports by index, effects only that unique has, and flasks', tinctures', maps' and idols' modifiers. Every other unique modifier can come on some kind of item in every mode."
+    },
+    "mark": {
+      "type": "bool",
+      "default": true,
+      "label": "Mark exciting items",
+      "description": "An item with any of these effects drops synthesised, so it looks special on the ground and in its tooltip."
+    },
+    "showInFilters": {
+      "type": "bool",
+      "default": false,
+      "label": "Loot filter beam",
+      "description": "Puts a rule at the top of every loot filter in the filter folder that always shows marked items, with a beam and a sound. It edits your own filters; turning it off takes the rule out again.",
+      "when": {
+        "mark": true
+      }
+    },
+    "announce": {
+      "type": "bool",
+      "default": true,
+      "label": "Tell me in chat",
+      "description": "A chat line when an exciting item drops, naming which effects it got (not what they are)."
+    },
+    "filterFolder": {
+      "type": "text",
+      "default": "",
+      "label": "Loot filter folder",
+      "description": "Empty: Documents\\My Games\\Path of Exile\\LocalExile.",
+      "advanced": true
+    }
+  }
+}

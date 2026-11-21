@@ -1,0 +1,14 @@
+{
+  "id": "excitingitems",
+  "name": "Exciting Items",
+  "description": "Rare chances on magic, rare and unique drops: a unique item's modifier as an extra implicit, an empowered modifier 10-100% above its roll, and one modifier more than the item could have, fractured with its side; they can all land on one item.",
+  "author": "marshmellion",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.5.2-beta"
+  ],
+  "kind": "feature",
+  "depends": [
+    "Game"
+  ]
+}
