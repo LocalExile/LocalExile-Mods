@@ -50,5 +50,6 @@ Waypoint edits the defaults and rules declared in `settings.json`. User changes 
 league and character; another player's choices are unaffected. A character's first command snapshots the current
 defaults. Reset that profile to follow future default changes again. Keep this user's settings file private.
 
-The mod orders one walk per target. The server checks the pet and the item again when collecting.
-If a target disappears, the pet can take another eligible target on the same tick. With no target, it returns to ordinary pet following.
+The server checks the pet and the item again when collecting. The same pet then goes straight to the closest eligible drop
+from its current position, within the character's pickup radius. If another player picks up the target first, the pet can
+switch to another drop. Once no eligible drop remains, it returns to ordinary pet following.

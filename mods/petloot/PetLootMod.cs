@@ -139,6 +139,49 @@ public sealed class PetLootMod : IMod
             await CosmeticsFeature.WalkPetTo(conn, id, conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds), () => Active(conn));
     }
 
+    static Candidate? FindTarget(ClientState conn, RunState state, Profile profile)
+    {
+        double now = conn.Clock.Elapsed.TotalSeconds;
+        var from = conn.Walk.Position(now);
+        lock (conn.Pets)
+        {
+            if (state.Pet is uint id && conn.Pets.TryGetValue(id, out var pet))
+                from = pet.Walk.Position(now);
+            else
+                state.Item = state.Pet = null;
+        }
+
+        Candidate? nearest = null;
+        double nearestDistance = double.PositiveInfinity;
+        foreach (var drop in Nearby(conn, profile))
+        {
+            if (!Accept(drop, profile) || state.RetryAfter.ContainsKey(drop.Id)) continue;
+            if (drop.Id == state.Item) return drop;
+            double distance = Distance(from.X, from.Y, drop.Item.GridX, drop.Item.GridY);
+            if (distance < nearestDistance) { nearestDistance = distance; nearest = drop; }
+        }
+        return nearest;
+    }
+
+    async Task<bool> StartWalk(ClientState conn, RunState state, Candidate drop)
+    {
+        var to = (X: drop.Item.GridX, Y: drop.Item.GridY);
+        double now = conn.Clock.Elapsed.TotalSeconds;
+        uint collector;
+        lock (conn.Pets)
+        {
+            if (conn.Pets.Count == 0) { state.Item = state.Pet = null; return false; }
+            collector = state.Pet is uint id && conn.Pets.ContainsKey(id) ? id
+                : conn.Pets.MinBy(p => { var pos = p.Value.Walk.Position(now); return Distance(pos.X, pos.Y, to.X, to.Y); }).Key;
+        }
+        state.Pet = collector;
+        state.Item = drop.Id;
+        state.Started = state.Seconds;
+        if (await CosmeticsFeature.WalkPetTo(conn, collector, to, () => Active(conn))) return true;
+        await Release(conn, state);
+        return false;
+    }
+
     async Task Tick(ClientState conn, double seconds)
     {
         var state = states.GetValue(conn, _ => new());
@@ -150,31 +193,10 @@ public sealed class PetLootMod : IMod
             state.Seconds += Math.Max(0, seconds);
             foreach (uint old in state.RetryAfter.Where(e => e.Value <= state.Seconds).Select(e => e.Key).ToArray())
                 state.RetryAfter.Remove(old);
-            var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-            Candidate? matching = null, nearest = null;
-            double nearestDistance = double.PositiveInfinity;
-            foreach (var candidate in Nearby(conn, profile))
-            {
-                if (!Accept(candidate, profile) || state.RetryAfter.ContainsKey(candidate.Id)) continue;
-                if (candidate.Id == state.Item) { matching = candidate; break; }
-                double distance = Distance(at.X, at.Y, candidate.Item.GridX, candidate.Item.GridY);
-                if (distance < nearestDistance) { nearestDistance = distance; nearest = candidate; }
-            }
-            var drop = matching ?? nearest;
+            var drop = FindTarget(conn, state, profile);
             if (drop is null) { await Release(conn, state); return; }
+            if (drop.Id != state.Item && !await StartWalk(conn, state, drop)) return;
             var to = (X: drop.Item.GridX, Y: drop.Item.GridY);
-            if (matching is null)
-            {
-                double now = conn.Clock.Elapsed.TotalSeconds;
-                lock (conn.Pets)
-                {
-                    if (conn.Pets.Count == 0) return;
-                    state.Pet = conn.Pets.MinBy(p => { var pos = p.Value.Walk.Position(now); return Distance(pos.X, pos.Y, to.X, to.Y); }).Key;
-                }
-                state.Item = drop.Id; state.Started = state.Seconds;
-                if (!await CosmeticsFeature.WalkPetTo(conn, state.Pet.Value, to, () => Active(conn)))
-                { await Release(conn, state); return; }
-            }
             Game.GroundPickup? pickup = null;
             lock (conn.Monsters)
             lock (conn.Pets)
@@ -193,14 +215,16 @@ public sealed class PetLootMod : IMod
                     }
                 }
             }
+            state.Item = null;
             if (pickup is not null)
-            {
-                state.Item = null;
                 await Game.SendPickup(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, conn, drop.Id, pickup);
-                return;
-            }
-            state.RetryAfter[drop.Id] = state.Seconds + 2;
-            await Release(conn, state);
+            else state.RetryAfter[drop.Id] = state.Seconds + 2;
+
+            // Start the next walk before the following tick can send the collector back to its owner.
+            if (Active(conn) && FindTarget(conn, state, profile) is { } next)
+                await StartWalk(conn, state, next);
+            else
+                await Release(conn, state);
         }
         finally { state.Gate.Release(); }
     }
