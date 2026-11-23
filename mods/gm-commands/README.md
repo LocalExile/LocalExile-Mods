@@ -23,9 +23,10 @@ whenever the Game module does.
 
 **Entity drills.** `/entity [id] <verb>` runs one thing on any monster. `skills` names the actor's own skills by the
 GrantedEffects Id the client shows, `skill <name>` plays one of them as its clip only (the server owes no hit),
-`skill 0x1a2b` sends the raw 0x1ab clip, `life <pct>` moves its life, `anim <index> [speed]` plays an animation and
-`list` shows what is near, nearest first. Without an id the nearest living monster is used, and the reply names it; the
-id (hex) may lead or trail the verb. `/ai off` first keeps a scripted fight from playing on its own.
+`skill 0x1a2b` sends the raw 0x1ab clip, `kill` kills it through the normal death path (experience, drops and quest
+progress, a boss's stage skipped), `life <pct>` moves its life, `anim <index> [speed]` plays an animation and `list`
+shows what is near, nearest first. Without an id the nearest living monster is used, and the reply names it; the id
+(hex) may lead or trail the verb. `/ai off` first keeps a scripted fight from playing on its own.
 
 **Top rolls.** `/item <name> max` gives the item as well rolled as it can be (`/item Mageblood max`,
 `/item Vaal Regalia rare max`), and `/item_max` does the same to the item on the cursor. Every implicit and explicit
