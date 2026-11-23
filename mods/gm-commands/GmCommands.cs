@@ -1791,7 +1791,7 @@ static class GmCommands
             }
             await player.Commands!.Reply($"{who}: verbs: skills, skill <name|0xskill> [id], life <pct> [id], "
                 + "anim <index> [speed] [id], list.");
-        })
+        }, "entity")
         .Add("ai", "/ai [on|off] (monsters chase you when you come near; emerge monsters rise either way)", async args =>
         {
             if (args.Length > 0) player.AiEnabled = !args[0].Equals("off", StringComparison.OrdinalIgnoreCase);
