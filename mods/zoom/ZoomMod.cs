@@ -66,17 +66,17 @@ public sealed class ZoomMod : IMod
         string id = mod.Manifest.Id;
         // A tick only runs once the area is ready on the client, and catches every way the level can differ from what the
         // client has: a new area, a /zoom, a changed setting, the mod switched on.
-        GameEvents.Tick.Add(id, (conn, _) => Follow(conn));
+        GameEvents.AreaTick.Add(id, GameEvents.Always((player, _) => Follow(player)));
         GameEvents.Command(id, "zoom", "/zoom [1 to 3 | out | in | off | default] (how far back the camera stands; 1 is the game's own view)", Command);
         mod.Log($"level {Text(_choices.Level)} for players who have not picked one");
     }
 
     static string Text(double level) => level.ToString("0.0#", CultureInfo.InvariantCulture);
 
-    static double[] StateOf(ClientState conn) => States.GetValue(conn, _ => new double[3]);
+    static double[] StateOf(Player player) => States.GetValue(player, _ => new double[3]);
 
     /// <summary>The level this player gets: their own (/zoom, kept with the account), else the setting.</summary>
-    double Wanted(ClientState conn, double[] state)
+    double Wanted(Player player, double[] state)
     {
         double own;
         lock (state) own = state[2];
@@ -85,7 +85,7 @@ public sealed class ZoomMod : IMod
             own = -1;
             try
             {
-                if (double.TryParse(Program.WorldOf(conn).AccountData.Get(SavedKey), NumberStyles.Float, CultureInfo.InvariantCulture, out double saved))
+                if (double.TryParse(Program.WorldOf(player).AccountData.Get(SavedKey), NumberStyles.Float, CultureInfo.InvariantCulture, out double saved))
                     own = Math.Clamp(saved, Least, Most);
             }
             catch (Exception e) when (e is InvalidOperationException or IOException) { }
@@ -94,11 +94,11 @@ public sealed class ZoomMod : IMod
         return own > 0 ? own : Math.Clamp(_choices.Level, Least, Most);
     }
 
-    async Task Follow(ClientState conn)
+    async Task Follow(Player player)
     {
-        if (!conn.PlayerSent || conn.LeavingArea || conn.Closed) return;
-        double[] state = StateOf(conn);
-        double wanted = Wanted(conn, state);
+        if (!player.Connection.PlayerSent || player.LeavingArea || player.Closed) return;
+        double[] state = StateOf(player);
+        double wanted = Wanted(player, state);
         int point;
         lock (state)
         {
@@ -109,12 +109,12 @@ public sealed class ZoomMod : IMod
             state[0] = point + 1;
             state[1] = wanted;
         }
-        await Place(conn, point, (float)wanted);
+        await Place(player, point, (float)wanted);
     }
 
     /// <summary>Adds the zoom point number <paramref name="point"/> of this area. Each stands one cell further in from the
     /// corner than the one before, so the newest is the nearest to a player anywhere but in the corner itself, and wins.</summary>
-    async Task Place(ClientState conn, int point, float level)
+    async Task Place(Player player, int point, float level)
     {
         if (Game.Monsters.Find(Carrier) is not { } variety || variety.StateMachine is not { } states
             || !variety.ComponentsOrBase.Skip(MonsterObject.BaseComponents.Length).Where(c => c != "LimitedLifespan").SequenceEqual(CarrierExtras))
@@ -122,7 +122,7 @@ public sealed class ZoomMod : IMod
             Refuse("the game data has no usable " + Carrier);
             return;
         }
-        var layout = conn.Layout;
+        var layout = player.Layout;
         // The corner furthest from where players arrive; never outside the grid, where an object crashes the client.
         bool right = layout.SpawnX < layout.GridW / 2, down = layout.SpawnY < layout.GridH / 2;
         int inset = Math.Min(CornerInset + point, Math.Min(layout.GridW, layout.GridH) / 2);
@@ -144,13 +144,12 @@ public sealed class ZoomMod : IMod
         }
         blob = [.. blob[..at], 0, 0, .. blob[at..]];
 
-        var player = Program.PlayerOf(conn);
-        bool register;
-        lock (conn.Monsters) register = conn.MonsterTypes.Add((variety.Row, carrierLevel));
-        if (register) await player.Send(InstanceEntities.MonsterTypes([((ushort)variety.Row, carrierLevel)]), $"zoom: 0x0020 monster type {variety.Id}@{carrierLevel}");
-        uint id = conn.TakeObjectId();
+        var modPlayer = Program.PlayerOf(player);
+        if (point == 0 && !player.Area.MonsterTypes.Contains((variety.Row, carrierLevel)))
+            await modPlayer.Send(InstanceEntities.MonsterTypes([((ushort)variety.Row, carrierLevel)]), $"zoom: 0x0020 monster type {variety.Id}@{carrierLevel}");
+        uint id = player.TakeObjectId();
         uint type = InstanceEntities.ObjectTypeHash(MonsterObject.TypePath(variety.Id, carrierLevel));
-        await player.Send([.. InstanceEntities.CreateObject(id, type, blob),
+        await modPlayer.Send([.. InstanceEntities.CreateObject(id, type, blob),
             .. CallFunction(id, "camera_zoom", CameraSpeed, Everywhere, Everywhere, level),
             .. InstanceProtocol.RemoveObject(id)],
             $"zoom: point {point} at ({x}, {y}), level {Text(level)} (carrier 0x{id:x} created, camera_zoom called, removed)");
@@ -180,10 +179,10 @@ public sealed class ZoomMod : IMod
         return [.. message];
     }
 
-    Task Command(ClientState conn, string[] args)
+    Task Command(Player player, string[] args)
     {
-        double[] state = StateOf(conn);
-        double now = Wanted(conn, state);
+        double[] state = StateOf(player);
+        double now = Wanted(player, state);
         string word = args.Length == 1 ? args[0].ToLowerInvariant() : "";
         double? level = word switch
         {
@@ -196,25 +195,25 @@ public sealed class ZoomMod : IMod
         {
             // Again, for when a boss's own script cleared every zoom point: the next tick makes a new one.
             lock (state) if (state[1] != 1) state[1] = -1;
-            return conn.Commands!.Reply($"Zoom {Text(now)}. Change it: /zoom <1 to 3>, /zoom out, /zoom in, /zoom off.");
+            return player.Commands!.Reply($"Zoom {Text(now)}. Change it: /zoom <1 to 3>, /zoom out, /zoom in, /zoom off.");
         }
         if (word == "default")
         {
-            Save(conn, state, null);
-            return conn.Commands!.Reply($"Zoom {Text(Wanted(conn, state))}");
+            Save(player, state, null);
+            return player.Commands!.Reply($"Zoom {Text(Wanted(player, state))}");
         }
         if (level is not { } picked || double.IsNaN(picked))
-            return conn.Commands!.Reply($"/zoom <1 to 3>, /zoom out, /zoom in, /zoom off or /zoom default. Now: zoom {Text(now)}");
+            return player.Commands!.Reply($"/zoom <1 to 3>, /zoom out, /zoom in, /zoom off or /zoom default. Now: zoom {Text(now)}");
         picked = Math.Round(Math.Clamp(picked, Least, Most), 2);
-        Save(conn, state, picked);
-        return conn.Commands!.Reply($"Zoom {Text(picked)}");
+        Save(player, state, picked);
+        return player.Commands!.Reply($"Zoom {Text(picked)}");
     }
 
     /// <summary>The player's own level, for this connection and with the account; null goes back to the setting.</summary>
-    void Save(ClientState conn, double[] state, double? level)
+    void Save(Player player, double[] state, double? level)
     {
         lock (state) state[2] = level ?? -1;
-        try { Program.WorldOf(conn).AccountData.Change(SavedKey, _ => level is { } l ? Text(l) : ""); }
+        try { Program.WorldOf(player).AccountData.Change(SavedKey, _ => level is { } l ? Text(l) : ""); }
         catch (Exception e) when (e is InvalidOperationException or IOException) { _mod.Log($"the level was not saved: {e.Message}"); }
     }
 }

@@ -72,4 +72,4 @@ only the rule.
 
 Only new drops are changed: an item a player drops from the inventory is never rolled again.
 
-Works with LocalExile 0.5.2-beta and its main branch; it needs no change in LocalExile.
+1.0.2 works with LocalExile v0.6.0-beta; earlier 1.0.1 worked with v0.5.2-beta.

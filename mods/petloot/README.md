@@ -4,7 +4,7 @@ An opt-in mod: a worn cosmetic pet walks to nearby selected stackable items and 
 enable it with `/mod_enable petloot` or Waypoint. `/petloot off` pauses pickup for this character, including after an
 area change or restart; `/petloot on` resumes it. Removing or disabling the mod leaves normal pets following the player.
 
-Versions 1.1.0 and later require LocalExile v0.5.2-beta or later, the first release with the movement-speed hook
+1.2.1 requires LocalExile v0.6.0-beta (`Player`, `GameEvents.AreaTick`); 1.1.0-1.2.0 required LocalExile v0.5.2-beta, the first release with the movement-speed hook
 ([LocalExile PR #1045](https://github.com/LocalExile/LocalExile/pull/1045)); it does not load on v0.5.1-beta, where 1.0.5
 is the version to use. Pickup runs in leagues with both Game and Cosmetics.
 

@@ -37,12 +37,17 @@ AfflictionNotablePrismaticHeart__`. The theme is what the small passives grant, 
 size's, as `/item Large Cluster Jewel` does; `none` makes a jewel without a theme, whose small passives the client draws
 as "Nothingness". Each `mod` is the Mods Id of an affix: a notable, or an "also grant" one.
 
+**Stat commands.** `/set_stat <stat> <value>`, `/set_speed <percent>` and `/set_aoe <percent>` add their value to the
+stat as a buff on the character in its area (no icon; the character panel shows the stat): every other source still
+counts, and the buff is gone in the next area. `off` takes it away.
+
 LocalExile's own dev scripts (the campaign driver, the level generator's tour loop, `client_control.py`) and Waypoint's
 item crafter send these commands: install this mod for them.
 
 `/item_tab` fills (slotted, Flask and Gem tabs) refresh unloaded inventories before publishing their changes, including tabs kept in the client cache. Existing items are preserved; quantities are added only once.
 
-Works with: 1.5.0, 1.4.1 and 1.4.0 need LocalExile v0.5.2-beta (from 1.4.1 `/god` and `/set_aoe` relight a
+Works with: 1.6.0 requires LocalExile v0.6.0-beta (`Player`, `GameArea`, `AreaStatBuffs`, LocalExile/LocalExile#1040).
+1.5.0, 1.4.1 and 1.4.0 need LocalExile v0.5.2-beta (from 1.4.1 `/god` and `/set_aoe` relight a
 burning Righteous Fire through its `RelightRighteousFire`, LocalExile/LocalExile#1070; `/cluster_jewel` uses its
 `ClusterJewels`, LocalExile/LocalExile#948). 1.3.0 needs LocalExile v0.5.1-beta (`/stash_add` uses LocalExile/LocalExile#891, and the server's monster calls
 changed). 1.1.3 works with v0.4.3-beta and v0.5.0-beta, not v0.5.1-beta: there its `/spawn_mob` fails and ends the

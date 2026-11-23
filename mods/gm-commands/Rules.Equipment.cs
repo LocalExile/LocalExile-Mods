@@ -7,16 +7,16 @@ static partial class GmCommandsRules
 {
     // Dev commands (/item_mod, /rarity, /sockets): changes the held item and replaces it on the cursor (0xbf removing and adding
     // its id). The item needs the component the change is about.
-    internal static async Task ChangeHeldItem(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, Func<Item, Item> change, string what,
+    internal static async Task ChangeHeldItem(Player player, Func<Item, Item> change, string what,
         string component = "Mods")
     {
-        var items = ItemsOf(conn);
-        if (items.Items(PlayerInventories.Cursor) is not [var held, ..]) { await conn.Commands!.Reply("Hold an item first"); return; }
-        if (!held.Item.Components.Contains(component)) { await conn.Commands!.Reply($"{ItemsFor(conn).ByHash(held.Item.TypeHash)?.Name} has no {component} component"); return; }
+        var items = ItemsOf(player);
+        if (items.Items(PlayerInventories.Cursor) is not [var held, ..]) { await player.Commands!.Reply("Hold an item first"); return; }
+        if (!held.Item.Components.Contains(component)) { await player.Commands!.Reply($"{ItemsFor(player).ByHash(held.Item.TypeHash)?.Name} has no {component} component"); return; }
         if (items.Change(PlayerInventories.Cursor, held.Id, change) is not { } changed) return;
-        await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Cursor),
+        await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Cursor),
             items.NextRevision(PlayerInventories.Cursor), [held.Id], [changed]), $"0x00bf cursor: item {held.Id} {what}");
-        await conn.Commands!.Reply(what);
+        await player.Commands!.Reply(what);
     }
 
     internal static ModSection? ParseSection(string text) => text.ToLowerInvariant() switch

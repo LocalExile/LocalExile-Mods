@@ -17,18 +17,17 @@ static class TeleportTargets
 
     /// <summary>Every named place of the player's area, in a stable order: monsters, NPCs, the area transitions it sees,
     /// the waypoint, the arrival point, then the capture's objects in file order.</summary>
-    public static List<Target> Candidates(ClientState conn, string folder = "data/walkability")
+    public static List<Target> Candidates(Player player, string folder = "data/walkability")
     {
-        double now = conn.Clock.Elapsed.TotalSeconds;
+        double now = player.Clock.Elapsed.TotalSeconds;
         var list = new List<Target>();
-        lock (conn.Monsters)
-            foreach (var (id, m) in conn.Monsters)
-            {
-                var (x, y) = m.Walk.Position(now);
-                list.Add(new(m.Label, id, x, y));
-            }
-        lock (conn.Npcs)
-            foreach (var (id, n) in conn.Npcs)
+        foreach (var (id, m) in player.Area.Monsters)
+        {
+            var (x, y) = m.Walk.Position(now);
+            list.Add(new(m.Label, id, x, y));
+        }
+        lock (player.Npcs)
+            foreach (var (id, n) in player.Npcs)
             {
                 // By name and by type (NPCs.dat Id's last part): several share a name (Lady Dialla, Sin, Nessa), the
                 // campaign steps name the one they mean (DiallaRapture, SinTukohama, NessaMudFlats).
@@ -37,11 +36,11 @@ static class TeleportTargets
                 if (!type.Equals(n.Npc.Name, StringComparison.OrdinalIgnoreCase)) list.Add(new(type, id, n.X, n.Y));
             }
         // The exits this player sees: a quest's replaced, gated or league-scoped ones stay in the layout (TransitionShown).
-        foreach (var (id, t) in conn.Layout.AreaTransitions.Where(e => TransitionShown(conn, e.Id, e.Transition)))
+        foreach (var (id, t) in player.Layout.AreaTransitions.Where(e => TransitionShown(player, e.Id, e.Transition)))
             list.Add(new($"transition to {AreaTransitionCatalog.IdOf(t.DestinationHash16) ?? $"0x{t.DestinationHash16:x4}"}", id, t.GridX, t.GridY));
-        if (conn.Layout.Waypoint is { } w) list.Add(new("waypoint", null, w.GridX, w.GridY));
-        list.Add(new("arrival", null, conn.Layout.SpawnX, conn.Layout.SpawnY));
-        list.AddRange(CapturedObjects(conn.Layout.Id, conn.Seed, folder));
+        if (player.Layout.Waypoint is { } w) list.Add(new("waypoint", null, w.GridX, w.GridY));
+        list.Add(new("arrival", null, player.Layout.SpawnX, player.Layout.SpawnY));
+        list.AddRange(CapturedObjects(player.Layout.Id, player.Seed, folder));
         return list;
     }
 
@@ -68,14 +67,14 @@ static class TeleportTargets
     /// A cell lands on itself when walkable, else on the nearest walkable cell; a named place lands next to it
     /// (<see cref="AreaLayout.Near"/>), so an object can be used from there. Null with <paramref name="error"/> otherwise.
     /// </summary>
-    public static Destination? Resolve(ClientState conn, IReadOnlyList<string> args, IReadOnlyList<Target> candidates, out string? error)
+    public static Destination? Resolve(Player player, IReadOnlyList<string> args, IReadOnlyList<Target> candidates, out string? error)
     {
         error = null;
         if (args.Count == 0) { error = "Usage: /tp <x> <y> | /tp <+dx> <+dy> | /tp <id> | /tp <name> [n] | /tp list [filter]"; return null; }
-        var layout = conn.Layout;
+        var layout = player.Layout;
         if (args.Count == 2 && Coordinate(args[0]) is { } cx && Coordinate(args[1]) is { } cy)
         {
-            var (px, py) = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
+            var (px, py) = player.Walk.Position(player.Clock.Elapsed.TotalSeconds);
             int x = cx.Relative ? px + cx.Value : cx.Value, y = cy.Relative ? py + cy.Value : cy.Value;
             if (x < 0 || y < 0 || (layout.GridW > 0 && x >= layout.GridW) || (layout.GridH > 0 && y >= layout.GridH))
             {

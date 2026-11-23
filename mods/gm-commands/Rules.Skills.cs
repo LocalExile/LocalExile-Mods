@@ -9,11 +9,10 @@ using DamagePacket = GameServer.Core.World.DamagePacket;
 static partial class GmCommandsRules
 {
     // An intentional /set_level reset invalidates older XP events before publishing its current level and points.
-    internal static async Task SetLevel(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, int level)
+    internal static async Task SetLevel(Player player, int level)
     {
-        lock (conn.Monsters)
-            if (HardcoreProgressBlocked(conn)) return;
-        var change = RecordExperienceReset(conn, level);
-        await PublishExperienceChange(remote, stream, ciphers, conn, change, $"/set_level {level}");
+        if (HardcoreProgressBlocked(player)) return;
+        var change = RecordExperienceReset(player, level);
+        await PublishExperienceChange(player, change, $"/set_level {level}");
     }
 }

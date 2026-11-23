@@ -13,27 +13,25 @@ static partial class GmCommandsRules
 
     // /charges: shows the charges, or sets (no refresh roll), gains (as a skill would: refreshes, can reach the maximum
     // chance) or clears them. The ticker applies the change within a step.
-    internal static async Task ChargesCommand(ClientState conn, string[] args)
+    internal static async Task ChargesCommand(Player player, string[] args)
     {
-        var session = ChargesOf(conn);
+        var session = ChargesOf(player);
         if (args.Length == 0)
         {
-            double now = conn.Clock.Elapsed.TotalSeconds;
-            string text;
-            lock (conn.Monsters)
-                text = string.Join("; ", Charges.Types.Select(t =>
-                {
-                    var l = session.Limits(t);
-                    return $"{Charges.Name(t)}{(session.Converted(t) ? $" (as {Charges.SpecialName(t)})" : "")} {session.Effective(t)}/{l.Maximum} (minimum {l.Minimum}, " +
-                        $"{l.DurationMs / 1000.0:0.###} s, {session.State.Remaining(t, now):0.0} s left)";
-                }));
-            await conn.Commands!.Reply($"Charges: {text}.");
+            double now = player.Clock.Elapsed.TotalSeconds;
+            string text = string.Join("; ", Charges.Types.Select(t =>
+            {
+                var l = session.Limits(t);
+                return $"{Charges.Name(t)}{(session.Converted(t) ? $" (as {Charges.SpecialName(t)})" : "")} {session.Effective(t)}/{l.Maximum} (minimum {l.Minimum}, " +
+                    $"{l.DurationMs / 1000.0:0.###} s, {session.State.Remaining(t, now):0.0} s left)";
+            }));
+            await player.Commands!.Reply($"Charges: {text}.");
             return;
         }
         if (args[0].Equals("clear", StringComparison.OrdinalIgnoreCase))
         {
             session.Enqueue(new ChargeEvent.Set(null, 0));
-            await conn.Commands!.Reply("Charges cleared.");
+            await player.Commands!.Reply("Charges cleared.");
             return;
         }
         bool add = args[0].Equals("add", StringComparison.OrdinalIgnoreCase);
@@ -42,6 +40,6 @@ static partial class GmCommandsRules
         int count = args.Length > 1 ? int.Parse(args[1]) : 1;
         if (count < 0) throw new ArgumentException("a count of 0 or more");
         session.Enqueue(add ? new ChargeEvent.Grant(type, count, "/charges add") : new ChargeEvent.Set(type, count));
-        await conn.Commands!.Reply($"{(add ? "Gaining" : "Setting")} {count} {Charges.Name(type)} charge(s).");
+        await player.Commands!.Reply($"{(add ? "Gaining" : "Setting")} {count} {Charges.Name(type)} charge(s).");
     }
 }

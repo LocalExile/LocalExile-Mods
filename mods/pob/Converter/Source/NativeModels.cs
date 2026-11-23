@@ -96,6 +96,10 @@ static class CharacterSaves
             RequiredLevel = item.RequiredLevel, RelicStyle = item.RelicStyle, Vestigial = item.Vestigial };
 }
 
+static class Stat
+{
+    public const string LocalEnchantStatMagnitudePlusPct = "local_enchant_stat_magnitude_+%";
+}
 static class ItemModStats
 {
     public delegate int? ModifierValueRule(ItemMod mod, ModCatalog.Mod row, int statIndex, long ordinaryEffect);

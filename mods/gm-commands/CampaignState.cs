@@ -102,7 +102,7 @@ static class CampaignState
 
     /// <summary>The CharacterStartQuestState presets in table order, as the quest engine loaded them (QuestStates).</summary>
     public static IReadOnlyList<Preset> LoadPresets() =>
-        [.. QuestStates.Default.Value.Presets.Select(p => new Preset(p.Id, p.Flags))];
+        [.. QuestStates.Default.Presets.Select(p => new Preset(p.Id, p.Flags))];
 
     /// <summary>The waypoints a preset gives (CharacterStartQuestState Areas, WorldAreas Ids: every one has a waypoint).
     /// The demo starts list where they begin (E3StartOfAct7: The Brine King's Reef, where Weylam sails to Act 7;
@@ -143,7 +143,7 @@ static class CampaignState
         used.Add(preset);
         var flags = used.SelectMany(p => p.Flags).ToList();
         if (completeQuests)
-            foreach (var p in used) flags.AddRange(CompletionFlags(QuestStates.Default.Value.FindPreset(p.Id)?.Quests ?? []));
+            foreach (var p in used) flags.AddRange(CompletionFlags(QuestStates.Default.FindPreset(p.Id)?.Quests ?? []));
         return [.. flags.Distinct()];
     }
 
@@ -155,7 +155,7 @@ static class CampaignState
     /// </summary>
     public static IReadOnlyList<string> CompletionFlags(IEnumerable<string> quests)
     {
-        var states = QuestStates.Default.Value;
+        var states = QuestStates.Default;
         var flags = new List<string>();
         foreach (string quest in quests)
             if (states.Of(quest).Where(s => s.Order == 0).OrderBy(s => s.Present.Count).FirstOrDefault() is { } done)

@@ -13,4 +13,4 @@ Waypoint or in `data/mods/mapdrop.json` in the server folder. The JSON values ar
 is a 5% chance on each eligible kill.
 
 Inspired by the map-drop settings in [mingyue8621/LocalExile-Mods](https://github.com/mingyue8621/LocalExile-Mods).
-Compatible with LocalExile 0.5.2-beta.
+1.0.1 requires LocalExile v0.6.0-beta (`DropRoll.Player`); 1.0.0 worked with v0.5.2-beta.

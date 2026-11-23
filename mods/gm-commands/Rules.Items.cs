@@ -10,13 +10,13 @@ static partial class GmCommandsRules
     /// the top base defence roll. A value that picks something stays (<see cref="PicksSomething"/>), and so do
     /// enchantments and hidden mods, whose values are not rolls. The top is the highest number, or the lowest for a
     /// stat where less is better (<see cref="LessIsBetter"/>).</summary>
-    internal static Item MaxRolled(ClientState conn, Item item)
+    internal static Item MaxRolled(Player player, Item item)
     {
-        var mods = ItemsFor(conn).Mods;
-        var own = UniquesFor(conn).RollsOf(item);
+        var mods = ItemsFor(player).Mods;
+        var own = UniquesFor(player).RollsOf(item);
         var fractured = item.FracturedIndexes();
         IReadOnlyList<(ModCatalog.Mod Mod, int Weight)> pool = item.Rarity is ItemRarity.Magic or ItemRarity.Rare
-            && ItemsFor(conn).ByHash(item.TypeHash) is { } type ? RollsFor(conn).Pool(type, item) : [];
+            && ItemsFor(player).ByHash(item.TypeHash) is { } type ? RollsFor(player).Pool(type, item) : [];
         // An affix's best tier: the highest-level mod of its series that the base rolls at this item level. A bench
         // craft is of another domain and an essence's mod is not in the pool, so both keep their tier.
         ModCatalog.Mod Best(ModCatalog.Mod mod) => mod.EssenceOnly ? mod : pool.Select(p => p.Mod)
@@ -29,9 +29,9 @@ static partial class GmCommandsRules
             var best = on.Section == ModSection.Explicit && !fractured.Contains(index) ? Best(mod) : mod;
             return new(on.Section, best.Hash, [.. Enumerable.Range(0, best.Stats.Count).Select(stat =>
             {
-                if (PicksSomething(best.Stats[stat].Id) && stat < on.Values.Count) return on.Values[stat];
+                if (PicksSomething(best.Stats[stat].Name) && stat < on.Values.Count) return on.Values[stat];
                 var (min, max) = own?.Invoke(best, on.Section, stat) ?? best.RangeAt(stat);
-                return LessIsBetter(best.Stats[stat].Id) ? Math.Min(min, max) : Math.Max(min, max);
+                return LessIsBetter(best.Stats[stat].Name) ? Math.Min(min, max) : Math.Max(min, max);
             })]);
         }
         return item with

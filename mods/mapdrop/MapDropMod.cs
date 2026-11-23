@@ -25,11 +25,11 @@ public sealed class MapDropMod : IMod
 
         GameEvents.Drops.Add(mod.Manifest.Id, drops =>
         {
-            int tier = drops.Conn.Instance?.Map is { } map && map.Area.Hash16 == drops.Conn.Layout.Hash
+            int tier = drops.Player.Instance?.Map is { } map && map.Area.Hash16 == drops.Player.Layout.Hash
                 ? map.Area.Tier : 0;
             if (tier <= 0)
             {
-                if (!campaign || !LateCampaign(drops.Conn.Layout.Id)) return;
+                if (!campaign || !LateCampaign(drops.Player.Layout.Id)) return;
                 tier = 1;
             }
             if (keys[Math.Clamp(tier, 1, 16)] is { } key

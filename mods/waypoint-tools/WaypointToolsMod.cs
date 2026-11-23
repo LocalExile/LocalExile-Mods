@@ -61,7 +61,7 @@ public sealed class WaypointToolsMod : IMod, IDisposable
         Directory.CreateDirectory(Replies);
         try { Serving(); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { mod.Log($"writing {Loaded} failed: {e.Message}"); }
-        GameEvents.Tick.Add(mod.Manifest.Id, (conn, _) => Tick(conn));
+        GameEvents.AreaTick.Add(mod.Manifest.Id, GameEvents.Always((player, _) => Tick(player)));
         _scan = new Timer(_ => Scan(), null, TimeSpan.Zero, TimeSpan.FromMilliseconds(250));
     }
 
@@ -203,10 +203,10 @@ public sealed class WaypointToolsMod : IMod, IDisposable
         }
     }
 
-    /// <summary>On a connection's own tick: carries out the requests for its character.</summary>
-    async Task Tick(ClientState conn)
+    /// <summary>On a player's own tick: carries out the requests for its character.</summary>
+    async Task Tick(Player player)
     {
-        if (conn is not { PlayerSent: true, Character: { Length: > 0 } character }) return;
+        if (player is not { Connection.PlayerSent: true, Character.Name: { Length: > 0 } character }) return;
         _ticked[character] = Environment.TickCount64;
         if (_pending.IsEmpty) return;
         foreach (var request in _pending.Values)
@@ -215,9 +215,9 @@ public sealed class WaypointToolsMod : IMod, IDisposable
                 ? string.Equals(request.Character, character, StringComparison.OrdinalIgnoreCase)
                 : InGame() is [var only] && string.Equals(only, character, StringComparison.OrdinalIgnoreCase);
             if (!mine || !_pending.TryRemove(request.Id, out _)) continue;
-            var (ok, message) = await GiveItems(conn, request.Item);
+            var (ok, message) = await GiveItems(player, request.Item);
             Answer(request, ok, message);
-            await Send(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, InstanceChat.ChatLine($"Waypoint: {message}"),
+            await Send(player, InstanceChat.ChatLine($"Waypoint: {message}"),
                 $"waypoint-tools: {message}");
         }
     }
@@ -225,24 +225,24 @@ public sealed class WaypointToolsMod : IMod, IDisposable
     /// <summary>Builds each item with the Gateway's own ItemCrafter.Build (the item format of LocalExile's
     /// Agents/docs/dev/item-crafter.md) and puts it into the main inventory, one object or each item of a JSON array in
     /// order, until one is refused or does not fit. Self-contained: no other mod is needed.</summary>
-    static async Task<(bool Ok, string Message)> GiveItems(ClientState conn, string json)
+    static async Task<(bool Ok, string Message)> GiveItems(Player player, string json)
     {
-        if (ItemsFor(conn).Error is { } error) return (false, error);
-        var items = ItemsOf(conn);
+        if (ItemsFor(player).Error is { } error) return (false, error);
+        var items = ItemsOf(player);
         var added = new List<InventoryItem>();
         string? failure = null, singleName = null;
         foreach (string spec in Specs(json))
         {
-            if (ItemCrafter.Build(ItemsFor(conn), RollsFor(conn), spec, conn.Pools.Level, Random.Shared, out string? why) is not { } created
-                || ItemsFor(conn).ByHash(created.TypeHash) is not { } type)
+            if (ItemCrafter.Build(ItemsFor(player), RollsFor(player), spec, player.Pools.Level, Random.Shared, out string? why) is not { } created
+                || ItemsFor(player).ByHash(created.TypeHash) is not { } type)
             { failure = why ?? "Unknown item type"; break; }
             if (items.FreeCell(PlayerInventories.MainInventory, type.Width, type.Height, ShapeOf) is not { } cell)
             { failure = "No room in the inventory"; break; }
             added.Add(items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, created)));
-            singleName = $"{(created.NameWords.Count > 0 ? RollsFor(conn).NameOf(created.NameWords) + " " : "")}{type.Name}";
+            singleName = $"{(created.NameWords.Count > 0 ? RollsFor(player).NameOf(created.NameWords) + " " : "")}{type.Name}";
         }
         if (added.Count == 0) return (false, failure ?? "No room in the inventory");
-        await Send(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers,
+        await Send(player,
             InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], added),
             $"0x00bf inventory 1: waypoint-tools item_give × {added.Count}");

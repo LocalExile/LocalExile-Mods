@@ -33,4 +33,4 @@ some boss rooms. The mod adds one more to each area, in a far corner and reachin
   show them standing still, or not at all, until the player comes closer.
 - After `/mod_disable zoom` the view returns to the game's own in the next area.
 
-Works with: 1.0.1 works with LocalExile v0.5.1-beta and v0.5.2-beta (the same code as 1.0.0); 1.0.0 needs v0.5.1-beta or later.
+Works with: 1.0.2 requires LocalExile v0.6.0-beta (`Player`, `GameEvents.AreaTick`); 1.0.1 worked with LocalExile v0.5.1-beta and v0.5.2-beta (the same code as 1.0.0).

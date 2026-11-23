@@ -9,4 +9,4 @@ Use an exact currency name or metadata ID as the key. A value of `1.25` gives on
 of a second. The default gives an extra Chaos Orb on 5% of eligible kills.
 
 Inspired by the configurable currency drops in [mingyue8621/LocalExile-Mods](https://github.com/mingyue8621/LocalExile-Mods).
-Compatible with LocalExile 0.5.2-beta.
+Compatible with LocalExile 0.5.2-beta and 0.6.0-beta.

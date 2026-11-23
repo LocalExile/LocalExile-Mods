@@ -12,7 +12,7 @@ public sealed class FastCampaignMod : IMod
 {
     // Before its settings were settings.json: read once into the user's values, then removed.
     const string OldSettingsFile = "settings.txt";
-    const string SpeedStat = "base_movement_velocity_+%";
+    const uint SpeedStat = Stat.BaseMovementVelocityPlusPct;
     const int MaxExperience = 100, MaxSpeed = 300;
 
     sealed record Choices(int Experience, int Speed, string Language);
@@ -52,7 +52,7 @@ public sealed class FastCampaignMod : IMod
 
     string Help() => string.Format(Text.Help[Volatile.Read(ref _language)], Volatile.Read(ref _experience), Volatile.Read(ref _speed));
 
-    Task SetNumber(ClientState conn, string[] args, string name, ref int setting, int min, int max, string[] done)
+    Task SetNumber(Player conn, string[] args, string name, ref int setting, int min, int max, string[] done)
     {
         int language = Volatile.Read(ref _language);
         if (args.Length != 1 || !int.TryParse(args[0], out int value) || value < min || value > max)
@@ -62,7 +62,7 @@ public sealed class FastCampaignMod : IMod
         return conn.Commands!.Reply(string.Format(done[language], value));
     }
 
-    Task SetLanguage(ClientState conn, string[] args)
+    Task SetLanguage(Player conn, string[] args)
     {
         int language = args.Length == 1 ? Text.Find(args[0]) : -1;
         if (language < 0) return conn.Commands!.Reply($"/fast_lang <{string.Join(" | ", Text.Languages)}>");

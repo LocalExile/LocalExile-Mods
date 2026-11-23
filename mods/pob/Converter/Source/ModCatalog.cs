@@ -11,7 +11,10 @@ sealed class ModCatalog(string folder = "data", bool ruthless = false)
 {
     /// <summary>A stat of a mod: its Stats.dat Id, the Stat{n}Min / Stat{n}Max roll range, and Stats.dat IsLocal (the
     /// stat changes the item it is on, not the character).</summary>
-    public sealed record ModStat(string Id, int Min, int Max, bool Local = false, bool Scalable = true);
+    public sealed record ModStat(string Id, int Min, int Max, bool Local = false, bool Scalable = true)
+    {
+        public string Name => Id;
+    }
 
     /// <summary>A Mods.dat row. GenerationType 1 prefix, 2 suffix, 3 unique / base implicit, 10 enchantment …;
     /// Domain 1 items.</summary>

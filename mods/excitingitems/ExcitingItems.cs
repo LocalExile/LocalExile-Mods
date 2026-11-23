@@ -9,9 +9,9 @@ using GameServer.Modding;
 /// - an empowered modifier: one implicit or explicit modifier's values times 1.1 to 2;
 /// - an extra modifier, one more than the item could have, and every modifier of its side (prefixes or suffixes)
 ///   fractured.
-/// There is no hook on a rolled drop, so the mod watches the instance's ground for new items on the player tick, takes
-/// a chosen one off the ground and puts the changed item down in its place; the Gateway's ground sync removes the old
-/// object from the client and creates the new one. The game's own refusals (no fracturing of influenced or synthesised
+/// There is no hook on a rolled drop, so the mod watches the instance's ground for new items on the area tick, takes
+/// a chosen one off the ground, removes the old object and publishes the changed item in its place via Game.SendWorldRemoval
+/// and Game.SendGroundItem. The game's own refusals (no fracturing of influenced or synthesised
 /// items) are its crafting rules, not a drop's: an item gets these whatever it is.
 /// </summary>
 public sealed class ExcitingItemsMod : IMod, IDisposable
@@ -67,7 +67,7 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
         public double Weight;
     }
     sealed class Watch { public uint Next; public bool Started; public readonly HashSet<uint> Ours = []; }
-    sealed record Forced(int Implicits, bool Empowered, bool Extra, ClientState For);
+    sealed record Forced(int Implicits, bool Empowered, bool Extra, Player For);
 
     readonly ConditionalWeakTable<ItemCatalog, List<Source>> _pools = new();
     readonly ConditionalWeakTable<InstanceGround, Watch> _watches = new();
@@ -83,30 +83,30 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
         _log = mod.Log;
         try { mod.Log(Filters(_choices)); }
         catch (Exception e) { mod.Log($"loot filters not updated: {e.Message}"); }
-        GameEvents.Tick.Add(id, (conn, _) => Scan(conn));
+        GameEvents.AreaTick.Add(id, GameEvents.Always((player, _) => Scan(player)));
         GameEvents.Command(id, "exciting",
             "/exciting (Exciting Items: the chances) | /exciting next implicit [1-3] | empowered | extra | all (the next magic, rare or unique drop gets it)",
-            async (conn, args) =>
+            async (player, args) =>
             {
-                var player = Program.PlayerOf(conn);
+                var modPlayer = Program.PlayerOf(player);
                 if (args.Length > 0 && args[0].Equals("next", StringComparison.OrdinalIgnoreCase))
                 {
                     string what = args.Length > 1 ? args[1].ToLowerInvariant() : "all";
                     int count = args.Length > 2 && int.TryParse(args[2], out int n) ? Math.Clamp(n, 1, 3) : 1;
                     var forced = what switch
                     {
-                        "implicit" or "implicits" => new Forced(count, false, false, conn),
-                        "empowered" or "boost" => new Forced(0, true, false, conn),
-                        "extra" or "fractured" => new Forced(0, false, true, conn),
-                        _ => new Forced(count, true, true, conn),
+                        "implicit" or "implicits" => new Forced(count, false, false, player),
+                        "empowered" or "boost" => new Forced(0, true, false, player),
+                        "extra" or "fractured" => new Forced(0, false, true, player),
+                        _ => new Forced(count, true, true, player),
                     };
                     Volatile.Write(ref _forced, forced);
-                    await player.Tell($"Exciting Items: your next magic, rare or unique drop gets {Effects(forced.Implicits, forced.Empowered, forced.Extra)}.");
+                    await modPlayer.Tell($"Exciting Items: your next magic, rare or unique drop gets {Effects(forced.Implicits, forced.Empowered, forced.Extra)}.");
                     return;
                 }
                 var c = _choices;
-                int known = Pool(Game.ItemsFor(conn), Game.UniquesFor(conn), Game.DropsFor(conn)).Count;
-                await player.Tell($"Exciting Items: unique implicits 1 in {c.Implicits.Chance} / {c.Implicits.ChanceTwo} / {c.Implicits.ChanceThree} " +
+                int known = Pool(Game.ItemsFor(player), Game.UniquesFor(player), Game.DropsFor(player)).Count;
+                await modPlayer.Tell($"Exciting Items: unique implicits 1 in {c.Implicits.Chance} / {c.Implicits.ChanceTwo} / {c.Implicits.ChanceThree} " +
                     $"({c.Implicits.Mode}, {known} modifiers known); empowered 1 in {c.Empowered.Chance} (+{Low(c)}-{High(c)}%); " +
                     $"extra fractured modifier 1 in {c.ExtraModifier.Chance}. /exciting next implicit|empowered|extra|all forces one.");
             });
@@ -140,7 +140,7 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
         && (JewelClasses.Contains(type.Class) ? !type.Id.Contains("PassiveTreeExpansion") && !type.Id.Contains("Timeless") : !NotGear.Contains(type.Class));
 
     bool Blacklisted(ModCatalog.Mod mod) => _choices.Blacklist.Any(entry => entry.StartsWith("stat:", StringComparison.OrdinalIgnoreCase)
-        ? mod.Stats.Any(s => s.Id.Contains(entry[5..], StringComparison.OrdinalIgnoreCase))
+        ? mod.Stats.Any(s => s.Name.Contains(entry[5..], StringComparison.OrdinalIgnoreCase))
         : !entry.StartsWith("class:", StringComparison.OrdinalIgnoreCase) && mod.Id.StartsWith(entry, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>A modifier only uniques of blacklisted kinds of item have ("class:UtilityFlask").</summary>
@@ -162,7 +162,7 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
     /// <summary>What a modifier is for, told by its stats' names; a modifier of none of these is utility.</summary>
     static Theme ThemeOf(ModCatalog.Mod mod)
     {
-        string words = string.Join(' ', mod.Stats.Select(s => s.Id)).ToLowerInvariant();
+        string words = string.Join(' ', mod.Stats.Select(s => s.Name)).ToLowerInvariant();
         var theme = Theme.None;
         foreach (var (t, regex) in Themes) if (regex.IsMatch(words)) theme |= t;
         // "damage taken" and "leech" are defence and sustain, not offence.
@@ -194,7 +194,7 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
                 if (catalog.Mods.ById(modId) is not { Stats.Count: > 0 } mod || Blacklisted(mod)) continue;
                 if (!byId.TryGetValue(modId, out var source))
                 {
-                    string words = (mod.Id + " " + string.Join(' ', mod.Stats.Select(s => s.Id))).ToLowerInvariant();
+                    string words = (mod.Id + " " + string.Join(' ', mod.Stats.Select(s => s.Name))).ToLowerInvariant();
                     bool bound = mod.Stats.Any(s => s.Local) || SlotWords.Any(words.Contains);
                     var ranges = (unique.Ranges ?? []).Where(r => r.Mod == modId && !r.Implicit)
                         .GroupBy(r => r.Stat).ToDictionary(g => g.Key, g => (g.First().Min, g.First().Max));
@@ -283,11 +283,11 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
         : rng.Next(Math.Max(1, _choices.Implicits.ChanceTwo)) == 0 ? 2
         : rng.Next(Math.Max(1, _choices.Implicits.Chance)) == 0 ? 1 : 0;
 
-    Item? WithUniqueImplicits(ClientState conn, Item item, ItemCatalog.BaseType type, int count, Random rng, List<string> log)
+    Item? WithUniqueImplicits(Player player, Item item, ItemCatalog.BaseType type, int count, Random rng, List<string> log)
     {
-        var catalog = Game.ItemsFor(conn);
+        var catalog = Game.ItemsFor(player);
         var have = item.Mods.Select(m => m.Hash).ToHashSet();
-        var pool = Pool(catalog, Game.UniquesFor(conn), Game.DropsFor(conn)).Where(s => !have.Contains(s.Mod.Hash) && Fits(catalog, s, type)).ToList();
+        var pool = Pool(catalog, Game.UniquesFor(player), Game.DropsFor(player)).Where(s => !have.Contains(s.Mod.Hash) && Fits(catalog, s, type)).ToList();
         var mods = item.Mods.ToList();
         var families = new HashSet<int>(item.Mods.SelectMany(m => catalog.Mods.ByHash(m.Hash)?.Families ?? []));
         int added = 0;
@@ -311,17 +311,17 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
     /// <summary>One implicit or explicit modifier (a unique implicit this mod added included), every value of it better
     /// than it is by the chosen percent. A modifier with a downside or a value that picks something (a granted gem, a
     /// seed) is not chosen.</summary>
-    Item? WithEmpowered(ClientState conn, Item item, Random rng, List<string> log)
+    Item? WithEmpowered(Player player, Item item, Random rng, List<string> log)
     {
-        var mods = Game.ItemsFor(conn).Mods;
-        var own = Game.UniquesFor(conn).RollsOf(item);
+        var mods = Game.ItemsFor(player).Mods;
+        var own = Game.UniquesFor(player).RollsOf(item);
         // A value its modifier cannot roll otherwise (a fixed 1) is a switch: "has no sockets", "cannot leech".
         bool Switch(ModCatalog.Mod mod, ModSection section, int stat, int value) =>
             Math.Abs(value) == 1 && (own?.Invoke(mod, section, stat) ?? mod.RangeAt(stat)) is var (min, max) && min == max;
         var candidates = item.Mods.Select((m, i) => (m, i)).Where(p => p.m.Section is ModSection.Explicit or ModSection.Implicit && mods.ByHash(p.m.Hash) is { } mod
             && p.m.Values.Any(v => v != 0)
-            && p.m.Values.Select((v, s) => s < mod.Stats.Count && !PicksSomething(mod.Stats[s].Id) && !Switch(mod, p.m.Section, s, v)
-                && (v == 0 || (v > 0) != LessIsBetter(mod.Stats[s].Id))).All(ok => ok)).ToList();
+            && p.m.Values.Select((v, s) => s < mod.Stats.Count && !PicksSomething(mod.Stats[s].Name) && !Switch(mod, p.m.Section, s, v)
+                && (v == 0 || (v > 0) != LessIsBetter(mod.Stats[s].Name))).All(ok => ok)).ToList();
         if (candidates.Count == 0) return null;
         var (chosen, index) = candidates[rng.Next(candidates.Count)];
         int percent = rng.Next(Low(_choices), High(_choices) + 1);
@@ -335,11 +335,11 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
     /// <summary>One modifier more than the item could have, and its side fractured: a rare (or magic item) is first
     /// filled to its most prefixes and suffixes, then gets one more of a side; a unique gets one rare-style prefix or
     /// suffix. The fractured modifiers go to the front of the explicits, where the client reads them.</summary>
-    Item? WithExtraModifier(ClientState conn, Item item, ItemCatalog.BaseType type, Random rng, List<string> log)
+    Item? WithExtraModifier(Player player, Item item, ItemCatalog.BaseType type, Random rng, List<string> log)
     {
         if (item.FracturedCount > 0) return null;
-        var catalog = Game.ItemsFor(conn);
-        var rolls = Game.RollsFor(conn);
+        var catalog = Game.ItemsFor(player);
+        var rolls = Game.RollsFor(player);
         const int Prefix = ItemRolls.Prefix, Suffix = ItemRolls.Suffix;
         int SideOf(ItemMod m) => catalog.Mods.ByHash(m.Hash)?.GenerationType ?? 0;
         int OnSide(Item it, int side) => it.Mods.Count(m => m.Section == ModSection.Explicit && SideOf(m) == side);
@@ -403,36 +403,37 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
     static readonly Regex OnEnemies = new(@"enem(y|ies).*damage_taken|ailment_types|chilling_areas", RegexOptions.CultureInvariant);
 
     /// <summary>The drop with whatever effects come up (or were forced), or null with none.</summary>
-    Item? Excite(ClientState conn, Item item, Random rng, Forced? forced, out string effects, List<string> log)
+    Item? Excite(Player player, Item item, Random rng, Forced? forced, out string effects, List<string> log)
     {
         effects = "";
         var c = _choices;
         if (item.Rarity is not (ItemRarity.Magic or ItemRarity.Rare or ItemRarity.Unique) || item.Mirrored || item.Corrupted
-            || Game.ItemsFor(conn).ByHash(item.TypeHash) is not { } type || !Target(type)) return null;
+            || Game.ItemsFor(player).ByHash(item.TypeHash) is not { } type || !Target(type)) return null;
         bool extra = forced?.Extra ?? (Takes(c.ExtraModifier.Rarities, item.Rarity) && rng.Next(Math.Max(1, c.ExtraModifier.Chance)) == 0);
         bool empowered = forced?.Empowered ?? (Takes(c.Empowered.Rarities, item.Rarity) && rng.Next(Math.Max(1, c.Empowered.Chance)) == 0);
         int implicits = forced?.Implicits ?? (Takes(c.Implicits.Rarities, item.Rarity) ? ImplicitsRolled(rng) : 0);
         if (!extra && !empowered && implicits == 0) return null;
         var now = item;
         bool gotExtra = false, gotEmpowered = false; int gotImplicits = 0;
-        if (extra && WithExtraModifier(conn, now, type, rng, log) is { } withExtra) { now = withExtra; gotExtra = true; }
-        if (implicits > 0 && WithUniqueImplicits(conn, now, type, implicits, rng, log) is { } withImplicits)
+        if (extra && WithExtraModifier(player, now, type, rng, log) is { } withExtra) { now = withExtra; gotExtra = true; }
+        if (implicits > 0 && WithUniqueImplicits(player, now, type, implicits, rng, log) is { } withImplicits)
         {
             gotImplicits = withImplicits.Mods.Count(m => m.Section == ModSection.Implicit) - now.Mods.Count(m => m.Section == ModSection.Implicit);
             now = withImplicits;
         }
         // Last, so it can land on any of them, a unique implicit just added included.
-        if (empowered && WithEmpowered(conn, now, rng, log) is { } withEmpowered) { now = withEmpowered; gotEmpowered = true; }
+        if (empowered && WithEmpowered(player, now, rng, log) is { } withEmpowered) { now = withEmpowered; gotEmpowered = true; }
         if (ReferenceEquals(now, item)) return null;
         effects = Effects(gotImplicits, gotEmpowered, gotExtra);
         return now with { Synthesised = c.Mark || now.Synthesised };
     }
 
-    async Task Scan(ClientState conn)
+    async Task Scan(Player player)
     {
-        var ground = conn.Instance.Ground;
+        if (!player.Connection.PlayerSent || player.Closed || player.LeavingArea) return;
+        var ground = player.Instance.Ground;
         var watch = _watches.GetValue(ground, _ => new Watch());
-        var found = new List<string>();
+        var replaced = new List<(uint OldId, uint NewId, WorldItemObject Item, string Label)>();
         lock (watch)
         {
             // What already lay there when the mod first saw this ground is left alone.
@@ -459,23 +460,26 @@ public sealed class ExcitingItemsMod : IMod, IDisposable
                 // only one player sees (a quest item, the start weapon) is left alone too.
                 if (watch.Ours.Remove(id) || lying.PlayerDropped || !ground.Origin(id).Shared
                     || lying.Item.Rarity is not (ItemRarity.Magic or ItemRarity.Rare or ItemRarity.Unique)) continue;
-                var forced = Volatile.Read(ref _forced) is { } f && ReferenceEquals(f.For, conn) ? f : null;
+                var forced = Volatile.Read(ref _forced) is { } f && ReferenceEquals(f.For, player) ? f : null;
                 var log = new List<string>();
-                if (Excite(conn, lying.Item, Random.Shared, forced, out string effects, log) is not { } changed) continue;
+                if (Excite(player, lying.Item, Random.Shared, forced, out string effects, log) is not { } changed) continue;
                 // Only one caller gets the item, so a pickup in the same moment cannot duplicate it.
                 if (ground.Take(id, lying) is null) continue;
-                // Put down by no one, as DepravedTrinity moves a shared item: the ground sync sends an item to every
-                // client but the one that put it down (that one was sent it where it dropped), so keeping the dropper
-                // here left the new item unsent to the player who killed the monster until they entered the area again.
-                watch.Ours.Add(ground.Add(lying with { Item = changed }, null, shared: true));
+                var replacement = lying with { Item = changed };
+                uint newId = ground.Add(replacement, null, shared: true);
+                watch.Ours.Add(newId);
                 if (forced is not null) Interlocked.CompareExchange(ref _forced, null, forced);
-                string name = Game.ItemsFor(conn).ByHash(changed.TypeHash)?.Name ?? "item";
-                found.Add($"{changed.Rarity} {name} with {effects}");
+                string name = Game.ItemsFor(player).ByHash(changed.TypeHash)?.Name ?? "item";
+                replaced.Add((id, newId, replacement, $"{changed.Rarity} {name} with {effects}"));
                 _log($"{changed.Rarity} {name} at ({lying.GridX}, {lying.GridY}): {string.Join("; ", log)}");
             }
         }
-        if (!_choices.Announce) return;
-        foreach (string text in found) await Program.PlayerOf(conn).Tell("* Exciting item dropped: " + text);
+        foreach (var (oldId, newId, replacement, label) in replaced)
+        {
+            await Game.SendWorldRemoval(player, oldId, $"excitingitems: replace world item 0x{oldId:x}");
+            await Game.SendGroundItem(player, newId, replacement, $"excitingitems: 0x02bb create world item 0x{newId:x} ({label})", justDropped: true);
+            if (_choices.Announce) await Program.PlayerOf(player).Tell("* Exciting item dropped: " + label);
+        }
     }
 
     // ---- loot filters ----

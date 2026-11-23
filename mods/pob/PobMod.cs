@@ -26,7 +26,7 @@ public sealed class PobMod : IMod, IDisposable
         });
     }
 
-    async Task Command(ClientState conn, string[] args)
+    async Task Command(Player conn, string[] args)
     {
         var player = Program.PlayerOf(conn);
         var request = requests.GetValue(player, _ => new Request());

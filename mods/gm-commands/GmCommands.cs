@@ -55,143 +55,70 @@ static class GmCommands
 
     // A stationary object moved and turned in place (S→C 0x1b7 and the Positioned rotation update, as the hideout editor
     // does), with its path blocker; until the player leaves the area.
-    internal static async Task MoveStationary(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint id,
+    internal static async Task MoveStationary(Player player, uint id,
         int x, int y, float degrees, int blockerSize, string what)
     {
-        conn.SetBlocker(id, x, y, blockerSize);
-        await Send(remote, stream, ciphers, InstanceProtocol.Teleport(id, x, y, 0x7fffffff), $"{what} 0x{id:x} to ({x}, {y})");
-        await Send(remote, stream, ciphers, InstanceHideoutEditing.Rotation(id, degrees * MathF.PI / 180), $"{what} turned {degrees}°");
-        await conn.Commands!.Reply($"{what} at ({x}, {y}), {degrees}°");
+        player.SetBlocker(id, x, y, blockerSize);
+        await Send(player, InstanceProtocol.Teleport(id, x, y, 0x7fffffff), $"{what} 0x{id:x} to ({x}, {y})");
+        await Send(player, InstanceHideoutEditing.Rotation(id, degrees * MathF.PI / 180), $"{what} turned {degrees}°");
+        await player.Commands!.Reply($"{what} at ({x}, {y}), {degrees}°");
     }
 
-    internal static ChatCommands Register(ChatCommands commands, string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    // The stat commands' values: a stat buff on the player's entity in its area (AreaStatBuffs), added like any other
+    // source and gone with the area. One owner per command, so /set_speed and /set_aoe never undo /set_stat's stats.
+    static readonly object StatBuff = new(), SpeedBuff = new(), AoeBuff = new();
+
+    static void SetBuffStat(Player player, object owner, uint stat, int? value)
+    {
+        if (player.Frames.Area is not { } area) throw new InvalidOperationException("not in an area");
+        area.ChangeStatBuff(new EntityId(player.Id), owner, stats =>
+        {
+            if (value is int v && v != 0) stats[stat] = v;
+            else stats.Remove(stat);
+        });
+    }
+
+    internal static ChatCommands Register(ChatCommands commands, Player player)
     {
         return commands
         .Add("raw","/raw <hex> (send one S→C message)", async args =>
         {
             byte[] m = ChatCommands.ParseHex(args);
-            await Send(remote, stream, ciphers, m, $"0x{m[0] << 8 | m[1]:x4} raw ({m.Length} bytes)");
+            await Send(player, m, $"0x{m[0] << 8 | m[1]:x4} raw ({m.Length} bytes)");
         })
-        .Add("set_speed", "/set_speed <percent> (100 = normal)", async args =>
+        .Add("set_speed", "/set_speed <percent> | off (100 = normal: adds percent - 100 to movement_velocity_+% while in this area)", async args =>
         {
-            int percent = int.Parse(args[0]);
+            if (args.Length == 0) throw new ArgumentException("percent or off");
+            int? percent = args[0].Equals("off", StringComparison.OrdinalIgnoreCase) ? null : int.Parse(args[0]);
             if (percent is < 10 or > 1000) throw new ArgumentException("10 to 1000");
-            int totalPct = conn.Pools.MovementVelocityPct + percent - 100;
-            conn.Walk.SetSpeed(Math.Max(1, WalkSpeed * (100 + totalPct) / 100 * PlayerActionFactor(conn)),
-                conn.Clock.Elapsed.TotalSeconds);
-            lock (conn.Monsters) conn.PlayerStats[StatKeys.MovementVelocityPct] = totalPct;
-            await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.MovementVelocityPct, totalPct)]),
-                $"0x01b3 stats: movement_velocity_+% (key {StatKeys.MovementVelocityPct}) = {totalPct} ({conn.Pools.MovementVelocityPct} passive + {percent - 100} dev)");
+            SetBuffStat(player, SpeedBuff, Stat.MovementVelocityPlusPct, percent - 100);
+            await player.Commands!.Reply(percent is int p ? $"Movement speed {p - 100:+0;-0}% in this area." : "Movement speed: the character's own.");
         })
         .Add("blind", "/blind [seconds] (dev: incoming Blind through normal immunity)", async args =>
         {
             double seconds = args.Length == 0 ? 4 : double.Parse(args[0], System.Globalization.CultureInfo.InvariantCulture);
             if (!double.IsFinite(seconds) || seconds <= 0 || seconds > 60) throw new ArgumentException("seconds in (0, 60]");
-            bool accepted = Game.InflictPlayerBlind(conn, seconds);
-            await Game.SendBlind(remote, stream, ciphers, conn);
-            await conn.Commands!.Reply(accepted ? "Blind applied." : "Blind refused (immune or unavailable).");
+            bool accepted = Game.InflictPlayerBlind(player, seconds);
+            await Game.SendBlind(player);
+            await player.Commands!.Reply(accepted ? "Blind applied." : "Blind refused (immune or unavailable).");
         })
-        .Add("set_stat", "/set_stat <stat name or client key> <value|off> (off removes the dev replacement)", async args =>
+        .Add("set_stat", "/set_stat <stat name or client key> <value|off> (adds the value to the stat while in this area; off takes it away)", async args =>
         {
             uint stat = Stats.Key(args[0]) ?? throw new ArgumentException($"unknown stat {args[0]}");
             bool off = args[1].Equals("off", StringComparison.OrdinalIgnoreCase);
-            int value = off ? 0 : int.Parse(args[1]);
-            bool rawAttribute = AttributeModifiers.IsInput(Stats.Name(stat));
-            string sourceName = Stats.Name(stat) ?? args[0];
-            bool rebuildLife = LifeManaPoolSources.IsLifeInput(sourceName) || InherentAttributeBonuses.IsLifeInput(sourceName);
-            bool rebuildMana = LifeManaPoolSources.IsManaInput(sourceName) || stat == Stats.Key(StrengthMana.PerFourStrength)
-                || InherentAttributeBonuses.IsManaInput(sourceName) || stat == Stats.Key(PowerOfPurpose.RawFlag)
-                || stat == Stats.Key(ManaRecoveryRules.PerDexterity);
-            bool rebuildDefences = AttributeDefenceSources.IsInput(sourceName) || InherentAttributeBonuses.IsInput(sourceName);
-            bool rebuildEnergyShield = sourceName == AttributeDefenceSources.EnergyShieldPerTenStrength
-                || InherentAttributeBonuses.IsEnergyShieldInput(sourceName);
-            bool lifeClamped = false, manaClamped = false;
-            lock (conn.Monsters)
-            {
-                if (off) conn.PlayerStats.Remove(stat);
-                else conn.PlayerStats[stat] = value;
-            }
-            // Keep each supported raw consumer and source restoration when another mechanic changes this gate.
-            if (AttackBaseCriticalStrike.IsInput(Stats.Name(stat) ?? args[0])
-                || AccuracyRating.IsInput(Stats.Name(stat) ?? args[0])
-                || ResistanceOvercap.IsInput(Stats.Name(stat) ?? args[0])
-                || rebuildLife || rebuildMana || rebuildDefences || rawAttribute
-                || Stats.Name(stat) == PlayerHitMitigation.ArmourAppliesToChaos || IsDevDefenceInput(Stats.Name(stat)))
-            {
-                while (true)
-                {
-                    CharacterStats.Pools before;
-                    lock (conn.Monsters) before = conn.Pools;
-                    var pools = PoolsFor(conn, before.Level);
-                    lock (conn.Monsters)
-                    {
-                        // A concurrent level/aura rebuild wins; retry against its current inputs and level.
-                        if (!ReferenceEquals(conn.Pools, before)) continue;
-                        conn.Pools = pools;
-                        if (rawAttribute || rebuildLife || rebuildMana)
-                        {
-                            uint lifeBefore = conn.PlayerLife, manaBefore = conn.PlayerMana;
-                            conn.PlayerLife = Math.Min(conn.PlayerLife, conn.PlayerUnreservedLife);
-                            conn.PlayerMana = Math.Min(conn.PlayerMana, (uint)UnreservedMana(conn));
-                            lifeClamped = conn.PlayerLife != lifeBefore;
-                            manaClamped = conn.PlayerMana != manaBefore;
-                        }
-                        break;
-                    }
-                }
-            }
-            // Action speed and its base-speed floors change the walk estimate immediately; attack/cast pacing reads the
-            // same stat through PlayerActionFactor when the next action starts.
-            if (Stats.Name(stat) is "action_speed_-%" or "action_speed_cannot_be_reduced_below_base"
-                or "movement_speed_cannot_be_reduced_below_base")
-                conn.ApplyMovementSpeed();
-            // The client's requirement checks (gear and gems) read virtual_strength/dexterity/intelligence_for_requirements,
-            // not the attributes themselves (13-items.md §2d), so an attribute set here sets its requirement value too.
-            if (Stats.Key($"virtual_{args[0]}_for_requirements") is uint requirement && requirement != stat)
-                lock (conn.Monsters)
-                {
-                    if (off) conn.PlayerStats.Remove(requirement);
-                    else conn.PlayerStats[requirement] = value;
-                }
-            await SendPlayerStatSnapshot(remote, stream, ciphers, conn,
-            () => PlayerStatsUpdateAtGate(conn, PlayerStatsWithCleared(conn)),
-                $"0x01b3 stats: {Stats.Name(stat)} (key 0x{stat:x}) = {(off ? "the character's own" : value)}, and the attack's final stats");
-            // Skills compute with their own stats (the attack and the character panel read those), so send them again.
-            await SendSkills(remote, stream, ciphers, conn);
-            if (rawAttribute)
-            {
-                // Skill refresh can restore an aura or update its reservation; use those completed caps too.
-                lock (conn.Monsters)
-                {
-                    conn.PlayerLife = Math.Min(conn.PlayerLife, conn.PlayerUnreservedLife);
-                    conn.PlayerMana = Math.Min(conn.PlayerMana, (uint)UnreservedMana(conn));
-                }
-                // A raw pool change can alter reservation while current mana stays idle. Sample resources only after
-                // earlier queued sends, and never refill or resurrect a character when a maximum grows.
-                await SendPlayerStatSnapshot(remote, stream, ciphers, conn,
-                    () => InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife, conn.PlayerReservedLife), "raw attribute current life");
-                await SendPlayerMana(remote, stream, ciphers, conn, "raw attribute mana reservation");
-            }
-            if (!rawAttribute && (rebuildLife || lifeClamped))
-                await Send(remote, stream, ciphers, [], "0x01b1 life after raw source rebuild", atGate: () =>
-                {
-                    lock (conn.Monsters) return InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife, conn.PlayerReservedLife);
-                });
-            // Reservation can change with maximum mana even when recovery leaves current mana unchanged.
-            if (!rawAttribute && (rebuildMana || manaClamped))
-                await SendPlayerMana(remote, stream, ciphers, conn, "0x01b1 mana after raw source rebuild");
-            if (rebuildEnergyShield)
-                await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+            int? value = off ? null : int.Parse(args[1]);
+            SetBuffStat(player, StatBuff, stat, value);
+            await player.Commands!.Reply(value is int v ? $"{Stats.Name(stat)} {v:+0;-0} in this area." : $"{Stats.Name(stat)}: the character's own.");
         }, "stat")
         .Add("stat", "/stat <stat name or client key> (dev: current character stat value)", async args =>
         {
             if (args.Length != 1 || Stats.Key(args[0]) is not uint stat)
             {
-                await conn.Commands!.Reply("Usage: /stat <stat name or client key>");
+                await player.Commands!.Reply("Usage: /stat <stat name or client key>");
                 return;
             }
-            int value = CharacterPlayerStats(conn).GetValueOrDefault(stat);
-            await conn.Commands!.Reply($"{args[0]} (key {stat}) = {value}");
+            int value = CharacterPlayerStats(player).GetValueOrDefault(stat);
+            await player.Commands!.Reply($"{args[0]} (key {stat}) = {value}");
         }, "stat")
         .Add("spawn_mob", "/spawn_mob <MonsterVarieties row, Id or name>[@level] [friendly] [normal|magic|rare|unique] [name]", async args =>
         {
@@ -199,7 +126,7 @@ static class GmCommands
             bool friendly = args.Any(a => a.Equals("friendly", StringComparison.OrdinalIgnoreCase));
             args = [.. args.Where(a => !a.Equals("friendly", StringComparison.OrdinalIgnoreCase))];
             if (args.Length == 0) throw new ArgumentException("which monster");
-            if (Monsters.Error is { } error) { await conn.Commands!.Reply(error); return; }
+            if (Monsters.Error is { } error) { await player.Commands!.Reply(error); return; }
             // Words up to a rarity keyword name the monster; words after it are a custom name. Only the four names count:
             // Enum.TryParse would also accept "100" as a rarity number and send a byte the client cannot read (Buffer Underflow).
             int r = Array.FindIndex(args, a => a.ToLowerInvariant() is "normal" or "magic" or "rare" or "unique");
@@ -220,43 +147,43 @@ static class GmCommands
                 level = (byte)bare;
                 query = query[..query.LastIndexOf(' ')];
             }
-            if (Monsters.Find(query) is not { } variety) { await conn.Commands!.Reply($"No monster matches \"{query}\"."); return; }
+            if (Monsters.Find(query) is not { } variety) { await player.Commands!.Reply($"No monster matches \"{query}\"."); return; }
             if (!variety.Supported)
             {
-                await conn.Commands!.Reply($"{variety} is not supported yet: its type has components " +
+                await player.Commands!.Reply($"{variety} is not supported yet: its type has components " +
                     $"{string.Join(", ", variety.ComponentsOrBase.Except(MonsterObject.BaseComponents))} that are not serialized.");
                 return;
             }
-            var (x, y) = conn.SpawnNear(conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds));
-            await SpawnMonster(remote, stream, ciphers, conn, variety, level, rarity, x, y, name, friendly);
+            var (x, y) = player.SpawnNear(player.Walk.Position(player.Clock.Elapsed.TotalSeconds));
+            await SpawnMonster(player, variety, level, rarity, x, y, name, friendly);
         }, "monster")
         .Add("statue", "/statue <MonsterVarieties row, Id or name> [variation] (dev: place that monster's stone statue at the player)", async args =>
         {
             if (args.Length == 0)
             {
-                await conn.Commands!.Reply("Usage: /statue <MonsterVarieties row, Id or name> [variation]");
+                await player.Commands!.Reply("Usage: /statue <MonsterVarieties row, Id or name> [variation]");
                 return;
             }
-            if (Monsters.Error is { } error) { await conn.Commands!.Reply(error); return; }
+            if (Monsters.Error is { } error) { await player.Commands!.Reply(error); return; }
             // 5 = the stone statue actor variation; 6 the dead pose, 7 another stance (the task reads this as its flag).
             byte variation = 5;
             if (args.Length > 1 && byte.TryParse(args[^1], out byte v)) { variation = v; args = args[..^1]; }
             string query = string.Join(' ', args);
-            if (Monsters.Find(query) is not { } variety) { await conn.Commands!.Reply($"No monster matches \"{query}\"."); return; }
-            var (x, y) = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-            uint id = conn.NextObjectId++;
-            await Send(remote, stream, ciphers, InstanceEntities.CreateObject(id,
+            if (Monsters.Find(query) is not { } variety) { await player.Commands!.Reply($"No monster matches \"{query}\"."); return; }
+            var (x, y) = player.Walk.Position(player.Clock.Elapsed.TotalSeconds);
+            uint id = player.NextObjectId++;
+            await Send(player, InstanceEntities.CreateObject(id,
                 InstanceEntities.ObjectTypeHash(InstanceMonsterStatue.TypePath),
                 InstanceMonsterStatue.Blob(x, y, variety.Hash16, 100, variation)),
                 $"0x02bb monster statue of {variety} at ({x}, {y})");
-            await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(id),
+            await Send(player, InstanceProtocol.EnterWakeZone(id),
                 $"0x01a9 monster statue 0x{id:x} enters wake zone");
-            await Send(remote, stream, ciphers, InstanceProtocol.AnimationUpdate(id, 0, 0, 1),
+            await Send(player, InstanceProtocol.AnimationUpdate(id, 0, 0, 1),
                 $"0x1b2 monster statue 0x{id:x} idle");
-            if (HomeHideout(conn)?.AreaHash16 == conn.Layout.Hash && CharacterName(conn) is { } character)
-                CharacterSaves.AddMonsterStatue(character, conn.Layout.Id,
+            if (HomeHideout(player)?.AreaHash16 == player.Layout.Hash && CharacterName(player) is { } character)
+                CharacterSaves.AddMonsterStatue(character, player.Layout.Id,
                     new CharacterSaves.SavedMonsterStatue(x, y, 0, variety.Hash16, 100, variation));
-            await conn.Commands!.Reply($"Monster statue of {variety} at ({x}, {y}) (object 0x{id:x}).");
+            await player.Commands!.Reply($"Monster statue of {variety} at ({x}, {y}) (object 0x{id:x}).");
         }, "monster")
         .Add("item", "/item <BaseItemTypes row, Id, name or unique> [count] [magic|rare] [max] (into the inventory, e.g. /item Small Life Flask 2, /item Iron Ring rare, /item Mageblood max; max: as well rolled as it can be, as /item_max)", async args =>
         {
@@ -267,134 +194,134 @@ static class GmCommands
             if (args.Length > 1 && args[^1].ToLowerInvariant() is "magic" or "rare") { rolled = Enum.Parse<ItemRarity>(args[^1], true); args = args[..^1]; }
             int count = 1, requested = 1;
             if (args.Length > 1 && int.TryParse(args[^1], out int n)) { requested = n; count = Math.Clamp(n, 1, 60); args = args[..^1]; }
-            if (ItemsFor(conn).Error is { } error) { await conn.Commands!.Reply(error); return; }
+            if (ItemsFor(player).Error is { } error) { await player.Commands!.Reply(error); return; }
             string query = string.Join(' ', args);
-            if (UniquesFor(conn).Find(query) is { } unique)
+            if (UniquesFor(player).Find(query) is { } unique)
             {
-                var uniqueItems = ItemsOf(conn);
+                var uniqueItems = ItemsOf(player);
                 var uniqueAdded = new List<InventoryItem>();
                 for (int i = 0; i < count; i++)
                 {
-                    if (UniquesFor(conn).Create(unique, Random.Shared) is not { } createdUnique
-                        || ItemsFor(conn).ByHash(createdUnique.TypeHash) is not { } uniqueType
+                    if (UniquesFor(player).Create(unique, Random.Shared) is not { } createdUnique
+                        || ItemsFor(player).ByHash(createdUnique.TypeHash) is not { } uniqueType
                         || uniqueItems.FreeCell(PlayerInventories.MainInventory, uniqueType.Width, uniqueType.Height, ShapeOf) is not { } uniqueCell) break;
                     uniqueAdded.Add(uniqueItems.Put(PlayerInventories.MainInventory,
-                        new InventoryItem(uniqueItems.NewItemId(), uniqueCell.X, uniqueCell.Y, max ? MaxRolled(conn, createdUnique) : createdUnique)));
+                        new InventoryItem(uniqueItems.NewItemId(), uniqueCell.X, uniqueCell.Y, max ? MaxRolled(player, createdUnique) : createdUnique)));
                 }
-                if (uniqueAdded.Count == 0) { await conn.Commands!.Reply("No room in the inventory"); return; }
-                await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+                if (uniqueAdded.Count == 0) { await player.Commands!.Reply("No room in the inventory"); return; }
+                await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                     uniqueItems.NextRevision(PlayerInventories.MainInventory), [], uniqueAdded),
                     $"0x00bf inventory 1: /item {unique.Name} x {uniqueAdded.Count}");
-                await conn.Commands!.Reply($"Added {unique.Name}{(max ? ", as well rolled as it can be" : "")}");
+                await player.Commands!.Reply($"Added {unique.Name}{(max ? ", as well rolled as it can be" : "")}");
                 return;
             }
-            if (UniquesFor(conn).NamedMap(query) is { } legendary)
+            if (UniquesFor(player).NamedMap(query) is { } legendary)
             {
-                var mapItems = ItemsOf(conn);
-                if (ItemsFor(conn).ByHash(legendary.TypeHash) is not { } mapType
+                var mapItems = ItemsOf(player);
+                if (ItemsFor(player).ByHash(legendary.TypeHash) is not { } mapType
                     || mapItems.FreeCell(PlayerInventories.MainInventory, mapType.Width, mapType.Height, ShapeOf) is not { } mapCell)
-                { await conn.Commands!.Reply("No room in the inventory"); return; }
+                { await player.Commands!.Reply("No room in the inventory"); return; }
                 var placedMap = mapItems.Put(PlayerInventories.MainInventory,
                     new InventoryItem(mapItems.NewItemId(), mapCell.X, mapCell.Y, legendary));
-                await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+                await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                     mapItems.NextRevision(PlayerInventories.MainInventory), [], [placedMap]),
                     "0x00bf inventory 1: /item legendary map");
-                await conn.Commands!.Reply("Added a legendary map");
+                await player.Commands!.Reply("Added a legendary map");
                 return;
             }
-            if (ItemsFor(conn).Find(query) is not { } type) { await conn.Commands!.Reply($"No item type \"{query}\""); return; }
+            if (ItemsFor(player).Find(query) is not { } type) { await player.Commands!.Reply($"No item type \"{query}\""); return; }
             if (!type.Supported)
             {
-                await conn.Commands!.Reply($"{type} has components the server cannot write yet: {string.Join(", ", type.Components.Where(c => !Item.Supported.Contains(c)))}");
+                await player.Commands!.Reply($"{type} has components the server cannot write yet: {string.Join(", ", type.Components.Where(c => !Item.Supported.Contains(c)))}");
                 return;
             }
-            var items = ItemsOf(conn);
+            var items = ItemsOf(player);
             if (type.Stackable)
             {
                 // A stackable type: [count] is how many, onto the stacks already there first, then into every free cell (at most
                 // a full main inventory, 12 × 5 stacks); what doesn't fit is reported.
                 int amount = Math.Clamp(requested, 1, type.MaxStack * 60);
                 var stacked = items.AddStacked(PlayerInventories.MainInventory, ItemCatalog.Create(type) with { StackSize = (ushort)Math.Min(amount, ushort.MaxValue) }, ShapeOf);
-                if (!stacked.Any) { await conn.Commands!.Reply("No room in the inventory"); return; }
-                await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+                if (!stacked.Any) { await player.Commands!.Reply("No room in the inventory"); return; }
+                await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                     items.NextRevision(PlayerInventories.MainInventory), stacked.RemovedIds, stacked.AddedItems),
                     $"0x00bf inventory 1: /item {type} × {amount - stacked.Left} ({stacked.Changed.Count} stack(s) grown, {stacked.Added.Count} new)");
-                if (stacked.Left > 0) await conn.Commands!.Reply($"No room for {stacked.Left} of them");
+                if (stacked.Left > 0) await player.Commands!.Reply($"No room for {stacked.Left} of them");
                 return;
             }
-            int itemLevel = Math.Clamp(conn.Pools.Level, 1, 100);
+            int itemLevel = Math.Clamp(player.Pools.Level, 1, 100);
             var added = new List<InventoryItem>();
             for (int i = 0; i < count; i++)
             {
                 if (items.FreeCell(PlayerInventories.MainInventory, type.Width, type.Height, ShapeOf) is not { } cell) break;
-                var (sockets, links) = ItemsFor(conn).DefaultSockets(type, itemLevel);
+                var (sockets, links) = ItemsFor(player).DefaultSockets(type, itemLevel);
                 var created = ItemCatalog.Create(type, sockets, links) with { ItemLevel = (byte)itemLevel };
-                if (rolled != ItemRarity.Normal) created = RollsFor(conn).Roll(created, rolled, Random.Shared);
-                if (max) created = MaxRolled(conn, created);
+                if (rolled != ItemRarity.Normal) created = RollsFor(player).Roll(created, rolled, Random.Shared);
+                if (max) created = MaxRolled(player, created);
                 added.Add(items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, created)));
             }
-            if (added.Count == 0) { await conn.Commands!.Reply("No room in the inventory"); return; }
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            if (added.Count == 0) { await player.Commands!.Reply("No room in the inventory"); return; }
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], added), $"0x00bf inventory 1: /item {type} × {added.Count}");
         }, "item")
         .Add("item_give", "/item_give <item as JSON> (dev: an item the launcher's item crafter composed, with its mods, into the inventory; a JSON array gives each item in it; Agents/docs/dev/item-crafter.md)", async args =>
         {
             if (args.Length == 0) throw new ArgumentException("which item?");
-            if (ItemsFor(conn).Error is { } error) { await conn.Commands!.Reply(error); return; }
-            var items = ItemsOf(conn);
+            if (ItemsFor(player).Error is { } error) { await player.Commands!.Reply(error); return; }
+            var items = ItemsOf(player);
             var added = new List<InventoryItem>();
             string? failure = null, singleName = null;
             foreach (string spec in GiftSpecs(string.Join(' ', args)))
             {
-                if (ItemCrafter.Build(ItemsFor(conn), RollsFor(conn), spec, conn.Pools.Level, Random.Shared, out string? why) is not { } created
-                    || ItemsFor(conn).ByHash(created.TypeHash) is not { } type)
+                if (ItemCrafter.Build(ItemsFor(player), RollsFor(player), spec, player.Pools.Level, Random.Shared, out string? why) is not { } created
+                    || ItemsFor(player).ByHash(created.TypeHash) is not { } type)
                 { failure = why ?? "Unknown item type"; break; }
                 if (items.FreeCell(PlayerInventories.MainInventory, type.Width, type.Height, ShapeOf) is not { } cell)
                 { failure = "No room in the inventory"; break; }
                 added.Add(items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, created)));
-                singleName = $"{(created.NameWords.Count > 0 ? RollsFor(conn).NameOf(created.NameWords) + " " : "")}{type.Name}";
+                singleName = $"{(created.NameWords.Count > 0 ? RollsFor(player).NameOf(created.NameWords) + " " : "")}{type.Name}";
             }
-            if (added.Count == 0) { await conn.Commands!.Reply(failure ?? "No room in the inventory"); return; }
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            if (added.Count == 0) { await player.Commands!.Reply(failure ?? "No room in the inventory"); return; }
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], added), $"0x00bf inventory 1: /item_give × {added.Count}");
-            await conn.Commands!.Reply(failure is null
+            await player.Commands!.Reply(failure is null
                 ? added.Count == 1 && singleName is not null ? $"Added {singleName}" : $"Added {added.Count} item(s)"
                 : $"Added {added.Count} item(s), then stopped: {failure}");
         })
         .Add("stash_place", "/stash_place <x> <y> <degrees> (dev: move and turn the stash of this area until you leave it; it opens from its new cell)", async args =>
         {
-            if (conn.StashObject == 0) { await conn.Commands!.Reply("No stash in this area"); return; }
+            if (player.StashObject == 0) { await player.Commands!.Reply("No stash in this area"); return; }
             var (x, y, degrees) = PlaceArgs(args, "/stash_place");
-            conn.StashAt = (x, y);
-            await MoveStationary(remote, stream, ciphers, conn, conn.StashObject, x, y, degrees, ClientState.StashBlockerSize, "stash");
+            player.StashAt = (x, y);
+            await MoveStationary(player, player.StashObject, x, y, degrees, Player.StashBlockerSize, "stash");
         })
         .Add("guild_stash_place", "/guild_stash_place <x> <y> <degrees> (dev: move and turn the guild stash of this area until you leave it)", async args =>
         {
-            if (conn.GuildStashObject == 0) { await conn.Commands!.Reply("No guild stash in this area"); return; }
+            if (player.GuildStashObject == 0) { await player.Commands!.Reply("No guild stash in this area"); return; }
             var (x, y, degrees) = PlaceArgs(args, "/guild_stash_place");
-            conn.GuildStashAt = (x, y);
-            await MoveStationary(remote, stream, ciphers, conn, conn.GuildStashObject, x, y, degrees, ClientState.StashBlockerSize, "guild stash");
+            player.GuildStashAt = (x, y);
+            await MoveStationary(player, player.GuildStashObject, x, y, degrees, Player.StashBlockerSize, "guild stash");
         })
         .Add("wp_place", "/wp_place [x y degrees] (dev: move and turn this area's waypoint; without arguments shows where it is)", async args =>
         {
-            if (conn.Layout.Waypoint is not { } waypoint) { await conn.Commands!.Reply("This area has no waypoint"); return; }
+            if (player.Layout.Waypoint is not { } waypoint) { await player.Commands!.Reply("This area has no waypoint"); return; }
             if (args.Length == 0)
             {
-                await conn.Commands!.Reply($"Waypoint at ({waypoint.GridX}, {waypoint.GridY}), {waypoint.Rotation * 180 / MathF.PI:0.#}°");
+                await player.Commands!.Reply($"Waypoint at ({waypoint.GridX}, {waypoint.GridY}), {waypoint.Rotation * 180 / MathF.PI:0.#}°");
                 return;
             }
             if (args.Length != 3 || !int.TryParse(args[0], out int x) || !int.TryParse(args[1], out int y) || !float.TryParse(args[2],
                     System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float degrees))
                 throw new ArgumentException("/wp_place [x y degrees]");
             float radians = degrees * MathF.PI / 180;
-            conn.MoveWaypoint(waypoint with { GridX = x, GridY = y, Rotation = radians });
-            await Send(remote, stream, ciphers, InstanceProtocol.Teleport(WaypointCatalog.ObjectId, x, y, 0x7fffffff), $"waypoint to ({x}, {y})");
-            await Send(remote, stream, ciphers, InstanceHideoutEditing.Rotation(WaypointCatalog.ObjectId, radians), $"waypoint turned {degrees}°");
-            await conn.Commands!.Reply($"Waypoint at ({x}, {y}), {degrees}°");
+            player.MoveWaypoint(waypoint with { GridX = x, GridY = y, Rotation = radians });
+            await Send(player, InstanceProtocol.Teleport(WaypointCatalog.ObjectId, x, y, 0x7fffffff), $"waypoint to ({x}, {y})");
+            await Send(player, InstanceHideoutEditing.Rotation(WaypointCatalog.ObjectId, radians), $"waypoint turned {degrees}°");
+            await player.Commands!.Reply($"Waypoint at ({x}, {y}), {degrees}°");
         })
         .Add("wp_state", "/wp_state active <n> | bits all|none|area|<bit> | model <.ao> (dev: recreate this area's waypoint with StateMachine \"active\" n or another model, or send 0x4c with all, no, this area's or one bit, to find what lights it)", async args =>
         {
-            if (conn.Layout.Waypoint is not { } waypoint) { await conn.Commands!.Reply("This area has no waypoint"); return; }
+            if (player.Layout.Waypoint is not { } waypoint) { await player.Commands!.Reply("This area has no waypoint"); return; }
             string usage = "/wp_state active <n> | bits all|none|area|<bit> | model <.ao>";
             if (args.Length != 2) throw new ArgumentException(usage);
             if (args[0] == "bits")
@@ -404,12 +331,12 @@ static class GmCommands
                 {
                     "all" => [.. Enumerable.Range(0, InstanceWaypoints.BitsetLength * 8)],
                     "none" => [],
-                    "area" => WaypointCatalog.Areas.BitOf(conn.Layout.Hash) is int own ? [own] : [],
+                    "area" => WaypointCatalog.Areas.BitOf(player.Layout.Hash) is int own ? [own] : [],
                     var n when int.TryParse(n, out int bit) => [bit],
                     _ => throw new ArgumentException(usage),
                 };
-                await Send(remote, stream, ciphers, InstanceWaypoints.Waypoints(bits), $"0x004c waypoints: {bits.Count} bits (/wp_state, {count} waypoint areas)");
-                await conn.Commands!.Reply($"0x4c sent with {bits.Count} bit(s)");
+                await Send(player, InstanceWaypoints.Waypoints(bits), $"0x004c waypoints: {bits.Count} bits (/wp_state, {count} waypoint areas)");
+                await player.Commands!.Reply($"0x4c sent with {bits.Count} bit(s)");
                 return;
             }
             var changed = args[0] switch
@@ -418,41 +345,41 @@ static class GmCommands
                 "model" => waypoint with { Model = args[1] },
                 _ => throw new ArgumentException(usage),
             };
-            conn.MoveWaypoint(changed);
-            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(WaypointCatalog.ObjectId), "0x02bd remove the waypoint (/wp_state)");
-            await Send(remote, stream, ciphers, InstanceEntities.CreateObject(WaypointCatalog.ObjectId,
+            player.MoveWaypoint(changed);
+            await Send(player, InstanceProtocol.RemoveObject(WaypointCatalog.ObjectId), "0x02bd remove the waypoint (/wp_state)");
+            await Send(player, InstanceEntities.CreateObject(WaypointCatalog.ObjectId,
                 InstanceEntities.ObjectTypeHash(WaypointObject.MetadataPath), changed.Blob()), $"0x02bb create waypoint {changed} (/wp_state)");
-            await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(WaypointCatalog.ObjectId), null);
-            await conn.Commands!.Reply($"Waypoint recreated: active {changed.Active}, model {changed.Model}");
+            await Send(player, InstanceProtocol.EnterWakeZone(WaypointCatalog.ObjectId), null);
+            await player.Commands!.Reply($"Waypoint recreated: active {changed.Active}, model {changed.Model}");
         })
         .Add("item_tab", $"/item_tab <stash tab name> <count> (dev: slotted tabs add up to count, at most {ItemTabMax}; Gem, Flask and Unique add one of each available missing variant, e.g. /item_tab Unique 1)", async args =>
         {
             if (args.Length < 2 || !int.TryParse(args[^1], out int requested) || requested < 1)
                 throw new ArgumentException("/item_tab <stash tab name> <count>, e.g. /item_tab Currency 1000");
-            if (Items.Error is { } error) { await conn.Commands!.Reply(error); return; }
+            if (Items.Error is { } error) { await player.Commands!.Reply(error); return; }
             int amount = Math.Min(requested, ItemTabMax);
             string name = string.Join(' ', args[..^1]);
-            var stash = PersonalStashOf(conn);
+            var stash = PersonalStashOf(player);
             if (ItemTabOf(stash, name) is not int tab)
             {
-                await conn.Commands!.Reply($"No stash tab \"{name}\"; tabs: {string.Join(", ", Enumerable.Range(0, stash.Count).Select(stash.NameOf))}");
+                await player.Commands!.Reply($"No stash tab \"{name}\"; tabs: {string.Join(", ", Enumerable.Range(0, stash.Count).Select(stash.NameOf))}");
                 return;
             }
             if (stash.TabType(tab) == StashRules.Flask)
             {
-                var flasks = stash.FillFlasks(tab, ItemsFor(conn), ShapeOf, out string flaskWhy);
-                if (flasks is null) { await conn.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\": {flaskWhy}"); return; }
+                var flasks = stash.FillFlasks(tab, ItemsFor(player), ShapeOf, out string flaskWhy);
+                if (flasks is null) { await player.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\": {flaskWhy}"); return; }
                 if (flasks.Added.Count > 0)
-                    await SendTabChange(remote, stream, ciphers, conn, stash, tab, [], flasks.Added,
+                    await SendTabChange(player, stash, tab, [], flasks.Added,
                         $"0x00bf stash tab {tab}: /item_tab {stash.NameOf(tab)}, {flasks.Added.Count} flask(s)");
-                await conn.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\" (FlaskStash): {flasks.Added.Count} flask(s) added, {flasks.Full} already present, {flasks.Skipped} unavailable; one of each flask/tincture base and unique");
+                await player.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\" (FlaskStash): {flasks.Added.Count} flask(s) added, {flasks.Full} already present, {flasks.Skipped} unavailable; one of each flask/tincture base and unique");
                 return;
             }
             if (stash.TabType(tab) == StashRules.Unique)
             {
-                var collection = stash.FillUniques(tab, UniquesFor(conn), ShapeOf);
-                await Game.RefreshUniqueCollection(remote, stream, ciphers, conn, stash, tab);
-                await conn.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\": {collection.Added} unique(s) added, {collection.Present} already present, {collection.Skipped.Count} unavailable.");
+                var collection = stash.FillUniques(tab, UniquesFor(player), ShapeOf);
+                await Game.RefreshUniqueCollection(player, stash, tab);
+                await player.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\": {collection.Added} unique(s) added, {collection.Present} already present, {collection.Skipped.Count} unavailable.");
                 if (collection.Skipped.Count > 0) Console.WriteLine($"[gateway] /item_tab unique unavailable: {string.Join(", ", collection.Skipped)}");
                 return;
             }
@@ -463,25 +390,25 @@ static class GmCommands
                 var gems = new[] { 1, 2, 3, 4 }.SelectMany(colour => new[] { false, true }.SelectMany(support => Items.FullShopGems(colour, support)))
                     .Select(g => ItemCatalog.Create(g.Type) with { GemVariant = g.Variant.Index });
                 var cells = stash.FillCells(tab, gems, i => $"{i.TypeHash:x8}:{i.GemVariant}", ShapeOf, out string gemWhy);
-                if (cells is null) { await conn.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\": {gemWhy}"); return; }
+                if (cells is null) { await player.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\": {gemWhy}"); return; }
                 if (cells.Added.Count > 0)
-                    await SendTabChange(remote, stream, ciphers, conn, stash, tab, [], cells.Added,
+                    await SendTabChange(player, stash, tab, [], cells.Added,
                         $"0x00bf stash tab {tab}: /item_tab {stash.NameOf(tab)}, {cells.Added.Count} gem(s)");
-                await conn.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\" (GemStash): {cells.Added.Count} gem(s) added, one of each variant" +
+                await player.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\" (GemStash): {cells.Added.Count} gem(s) added, one of each variant" +
                     (cells.Full > 0 ? $"; {cells.Full} already there" : "") + (cells.Skipped > 0 ? $"; {cells.Skipped} found no room" : ""));
                 return;
             }
             Item? Create(uint hash) => Items.ByHash(hash) is { Supported: true } type ? ItemCatalog.Create(type) : null;
             if (stash.FillSlots(tab, amount, Create, ShapeOf, out string why) is not { } fill)
             {
-                await conn.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\": {why}");
+                await player.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\": {why}");
                 return;
             }
             var now = fill.Changed.Concat(fill.Added).ToList();
             if (now.Count > 0)
-                await SendTabChange(remote, stream, ciphers, conn, stash, tab,
+                await SendTabChange(player, stash, tab,
                     [.. fill.Changed.Select(i => i.Id)], now, $"0x00bf stash tab {tab}: /item_tab {stash.NameOf(tab)} {amount}, {now.Count} slot(s)");
-            await conn.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\" ({stash.TypeOf(tab)}): up to {amount} more of {now.Count} item type(s)" +
+            await player.Commands!.Reply($"Tab \"{stash.NameOf(tab)}\" ({stash.TypeOf(tab)}): up to {amount} more of {now.Count} item type(s)" +
                 (requested > amount ? $" (at most {ItemTabMax} at a time)" : "") +
                 (fill.Full > 0 ? $"; {fill.Full} slot(s) already full" : "") +
                 (fill.Skipped > 0 ? $"; {fill.Skipped} type(s) skipped (the server can't create them or has no cell for their slot)" : ""));
@@ -499,10 +426,10 @@ static class GmCommands
             int count = 1;
             if (args.Length == 2 && (!int.TryParse(args[1], out count) || count is < 1 or > StashAddMax))
                 throw new ArgumentException($"count is 1-{StashAddMax}");
-            var stash = PersonalStashOf(conn);
+            var stash = PersonalStashOf(player);
             if (stash.VisibleCount + count > StashTabCap)
             {
-                await conn.Commands!.Reply($"Refused: the stash has {stash.VisibleCount} visible tab(s) and at most {StashTabCap} are allowed (asked for {count}).");
+                await player.Commands!.Reply($"Refused: the stash has {stash.VisibleCount} visible tab(s) and at most {StashTabCap} are allowed (asked for {count}).");
                 return;
             }
             // The tab's name and colour are this command's choice, not the stash's.
@@ -514,115 +441,115 @@ static class GmCommands
             };
             var added = stash.AddTabs(type, count, look.Name, look.R, look.G, look.B);
             string kind = type switch { 0 => "NormalStash", 1 => "PremiumStash", _ => "QuadStash" };
-            Console.WriteLine($"[gateway] {remote} /stash_add {kind} {count} -> tabs {string.Join(",", added)} ({stash.VisibleCount} visible in all, account {conn.Account ?? CharacterName(conn)}, league {conn.League ?? "Standard"})");
-            await conn.Commands!.Reply($"Added {added.Count} {kind} tab(s) {string.Join(", ", added)}; {stash.VisibleCount}/{StashTabCap} tabs. Re-enter the area (or relog) to see them.");
+            Console.WriteLine($"[gateway] {player.Connection.Remote} /stash_add {kind} {count} -> tabs {string.Join(",", added)} ({stash.VisibleCount} visible in all, account {player.Character.Account ?? CharacterName(player)}, league {player.Character.League ?? "Standard"})");
+            await player.Commands!.Reply($"Added {added.Count} {kind} tab(s) {string.Join(", ", added)}; {stash.VisibleCount}/{StashTabCap} tabs. Re-enter the area (or relog) to see them.");
         })
         .Add("stash", "/stash (open the stash panel where the character stands: S→C 0x7b kind 1 on the area's stash object)", async args =>
         {
-            if (!StashProbe) { await conn.Commands!.Reply("/stash is off (Game_STASH_PROBE=0)"); return; }
-            uint objectId = conn.StashObject;
-            await Send(remote, stream, ciphers, InstanceWaypoints.OpenUi(InstanceStash.OpenStashUi, objectId, 0),
+            if (!StashProbe) { await player.Commands!.Reply("/stash is off (Game_STASH_PROBE=0)"); return; }
+            uint objectId = player.StashObject;
+            await Send(player, InstanceWaypoints.OpenUi(InstanceStash.OpenStashUi, objectId, 0),
                 $"0x007b open the stash on /stash (object 0x{objectId:x}, no walk)");
-            Console.WriteLine($"[gateway] {remote} /stash 0x7b kind {InstanceStash.OpenStashUi} object 0x{objectId:x} in {conn.Layout.Id}");
-            await conn.Commands!.Reply($"Sent the stash panel request (object 0x{objectId:x}). No panel means the client wants a real stash object in this area.");
+            Console.WriteLine($"[gateway] {player.Connection.Remote} /stash 0x7b kind {InstanceStash.OpenStashUi} object 0x{objectId:x} in {player.Layout.Id}");
+            await player.Commands!.Reply($"Sent the stash panel request (object 0x{objectId:x}). No panel means the client wants a real stash object in this area.");
         })
         .Add("adorned", "/adorned [0-1000] (dev: The Adorned unique jewel into the inventory, corrupted, for passive-jewel testing; the normal item range is 0-100)", async args =>
         {
             int percent = args.Length > 0 && int.TryParse(args[0], out int value) ? Math.Clamp(value, 0, 1000) : 100;
-            if (Items.Find("Crimson Jewel") is not { } baseType) { await conn.Commands!.Reply("The Crimson Jewel base type is missing"); return; }
-            if (UniqueJewelVisuals.Of("The Adorned") is not ushort visual) { await conn.Commands!.Reply("The Adorned visual identity is missing"); return; }
-            if (Items.Mods.ById("CorruptedMagicJewelModEffectUnique__1") is not { } mod) { await conn.Commands!.Reply("The Adorned modifier is missing"); return; }
-            var items = ItemsOf(conn);
-            if (items.FreeCell(PlayerInventories.MainInventory, 1, 1, ShapeOf) is not { } cell) { await conn.Commands!.Reply("No room in the inventory"); return; }
+            if (Items.Find("Crimson Jewel") is not { } baseType) { await player.Commands!.Reply("The Crimson Jewel base type is missing"); return; }
+            if (UniqueJewelVisuals.Of("The Adorned") is not ushort visual) { await player.Commands!.Reply("The Adorned visual identity is missing"); return; }
+            if (Items.Mods.ById("CorruptedMagicJewelModEffectUnique__1") is not { } mod) { await player.Commands!.Reply("The Adorned modifier is missing"); return; }
+            var items = ItemsOf(player);
+            if (items.FreeCell(PlayerInventories.MainInventory, 1, 1, ShapeOf) is not { } cell) { await player.Commands!.Reply("No room in the inventory"); return; }
             var jewel = ItemCatalog.Create(baseType) with
             {
                 Rarity = ItemRarity.Unique, Corrupted = true, ItemLevel = 20, VisualIdentity = visual,
                 Mods = [new ItemMod(ModSection.Explicit, mod.Hash, [percent])],
             };
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, jewel));
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /adorned {percent}%");
-            await conn.Commands!.Reply($"The Adorned ({percent}%) added to the inventory");
+            await player.Commands!.Reply($"The Adorned ({percent}%) added to the inventory");
         })
         .Add("unique_jewel", "/unique_jewel <name> | list (dev: a global unique jewel, max-rolled, into the inventory)", async args =>
         {
             if (args.Length == 0 || args[0].Equals("list", StringComparison.OrdinalIgnoreCase))
             {
-                await conn.Commands!.Reply(string.Join(", ", UniqueJewelCatalogue.Names));
+                await player.Commands!.Reply(string.Join(", ", UniqueJewelCatalogue.Names));
                 return;
             }
             if (CreateUniqueJewel(string.Join(' ', args)) is not { } jewel)
             {
-                await conn.Commands!.Reply($"No global unique jewel \"{string.Join(' ', args)}\"");
+                await player.Commands!.Reply($"No global unique jewel \"{string.Join(' ', args)}\"");
                 return;
             }
-            var items = ItemsOf(conn);
+            var items = ItemsOf(player);
             if (items.FreeCell(PlayerInventories.MainInventory, 1, 1, ShapeOf) is not { } cell)
             {
-                await conn.Commands!.Reply("No room in the inventory");
+                await player.Commands!.Reply("No room in the inventory");
                 return;
             }
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, jewel));
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /unique_jewel {string.Join(' ', args)}");
-            await conn.Commands!.Reply($"{string.Join(' ', args)} added to the inventory");
+            await player.Commands!.Reply($"{string.Join(' ', args)} added to the inventory");
         })
         .Add("radius_jewel", "/radius_jewel <name> | list (dev: a radius unique jewel, max-rolled, into the inventory; pilot: the six attribute-conversion jewels)", async args =>
         {
             if (args.Length == 0 || args[0].Equals("list", StringComparison.OrdinalIgnoreCase))
             {
-                await conn.Commands!.Reply(string.Join(", ", RadiusJewelCatalogue.Names));
+                await player.Commands!.Reply(string.Join(", ", RadiusJewelCatalogue.Names));
                 return;
             }
             if (RadiusJewelCatalogue.FindWithVariant(string.Join(' ', args)) is not { } found
-                || RadiusJewelCatalogue.Create(ItemsFor(conn), found.Entry, found.Variant) is not { } jewel)
+                || RadiusJewelCatalogue.Create(ItemsFor(player), found.Entry, found.Variant) is not { } jewel)
             {
-                await conn.Commands!.Reply($"No radius unique jewel \"{string.Join(' ', args)}\"");
+                await player.Commands!.Reply($"No radius unique jewel \"{string.Join(' ', args)}\"");
                 return;
             }
-            var items = ItemsOf(conn);
+            var items = ItemsOf(player);
             if (items.FreeCell(PlayerInventories.MainInventory, 1, 1, ShapeOf) is not { } cell)
             {
-                await conn.Commands!.Reply("No room in the inventory");
+                await player.Commands!.Reply("No room in the inventory");
                 return;
             }
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, jewel));
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /radius_jewel {string.Join(' ', args)}");
-            await conn.Commands!.Reply($"{string.Join(' ', args)} added to the inventory");
+            await player.Commands!.Reply($"{string.Join(' ', args)} added to the inventory");
         })
         .Add("impossible_escape", "/impossible_escape <keystone> | list (dev: Impossible Escape for that keystone, into the inventory)", async args =>
         {
             if (args.Length == 0 || args[0].Equals("list", StringComparison.OrdinalIgnoreCase))
             {
-                await conn.Commands!.Reply(string.Join(", ", ImpossibleEscapeCatalogue.Names));
+                await player.Commands!.Reply(string.Join(", ", ImpossibleEscapeCatalogue.Names));
                 return;
             }
             string query = string.Join(' ', args);
-            if (ImpossibleEscapeCatalogue.Create(ItemsFor(conn), query) is not { } jewel)
+            if (ImpossibleEscapeCatalogue.Create(ItemsFor(player), query) is not { } jewel)
             {
-                await conn.Commands!.Reply($"No Impossible Escape keystone \"{query}\"");
+                await player.Commands!.Reply($"No Impossible Escape keystone \"{query}\"");
                 return;
             }
-            var items = ItemsOf(conn);
+            var items = ItemsOf(player);
             if (items.FreeCell(PlayerInventories.MainInventory, 1, 1, ShapeOf) is not { } cell)
             {
-                await conn.Commands!.Reply("No room in the inventory");
+                await player.Commands!.Reply("No room in the inventory");
                 return;
             }
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, jewel));
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /impossible_escape {query}");
             bool keystoneAllocated = ImpossibleEscapeCatalogue.Find(query) is { } keystone
-                && conn.Passives.Contains(keystone.GraphId);
-            await conn.Commands!.Reply($"Impossible Escape ({query}) added to the inventory" +
+                && player.Character.Passives.Contains(keystone.GraphId);
+            await player.Commands!.Reply($"Impossible Escape ({query}) added to the inventory" +
                 (keystoneAllocated ? "" : ". Allocate the chosen keystone first; the ring and bypass only apply around an allocated keystone."));
         })
         .Add("timeless", "/timeless <name> [seed] [conqueror] | list (dev: a Legion timeless jewel into the inventory; Elegant Hubris seeds are the displayed x20 values 2000-160000)", async args =>
         {
             if (args.Length == 0 || args[0].Equals("list", StringComparison.OrdinalIgnoreCase))
             {
-                await conn.Commands!.Reply(string.Join("; ", TimelessJewelCatalog.All.Select(e =>
+                await player.Commands!.Reply(string.Join("; ", TimelessJewelCatalog.All.Select(e =>
                     $"{e.Name} {e.DisplayedMinSeed}-{e.DisplayedMaxSeed}: " +
                     string.Join(", ", e.Conquerors.Select(c => c.Name)))));
                 return;
@@ -647,13 +574,13 @@ static class GmCommands
             }
             if (TimelessJewelCatalog.Find(string.Join(' ', tokens)) is not { } entry)
             {
-                await conn.Commands!.Reply($"No timeless jewel \"{string.Join(' ', tokens)}\"");
+                await player.Commands!.Reply($"No timeless jewel \"{string.Join(' ', tokens)}\"");
                 return;
             }
             if (seed is int asked && (asked < entry.DisplayedMinSeed || asked > entry.DisplayedMaxSeed
                 || entry.DisplayMultiplier > 1 && asked % entry.DisplayMultiplier != 0))
             {
-                await conn.Commands!.Reply($"{entry.Name} seed is {entry.DisplayedMinSeed}-{entry.DisplayedMaxSeed}" +
+                await player.Commands!.Reply($"{entry.Name} seed is {entry.DisplayedMinSeed}-{entry.DisplayedMaxSeed}" +
                     (entry.DisplayMultiplier > 1 ? $" in steps of {entry.DisplayMultiplier}" : ""));
                 return;
             }
@@ -662,47 +589,47 @@ static class GmCommands
             {
                 if (TimelessJewelCatalog.FindConqueror(entry, conquerorText) is not { } chosen)
                 {
-                    await conn.Commands!.Reply($"{entry.Name} conqueror is one of " +
+                    await player.Commands!.Reply($"{entry.Name} conqueror is one of " +
                         string.Join(", ", entry.Conquerors.Select(c => c.Name)));
                     return;
                 }
                 conqueror = chosen.Index;
             }
-            if (TimelessJewelCatalog.Create(ItemsFor(conn), entry.Name, seed, conqueror) is not { } jewel)
+            if (TimelessJewelCatalog.Create(ItemsFor(player), entry.Name, seed, conqueror) is not { } jewel)
             {
-                await conn.Commands!.Reply("The timeless jewel data is missing");
+                await player.Commands!.Reply("The timeless jewel data is missing");
                 return;
             }
-            var items = ItemsOf(conn);
+            var items = ItemsOf(player);
             if (items.FreeCell(PlayerInventories.MainInventory, 1, 1, ShapeOf) is not { } cell)
             {
-                await conn.Commands!.Reply("No room in the inventory");
+                await player.Commands!.Reply("No room in the inventory");
                 return;
             }
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, jewel));
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /timeless {entry.Name}");
-            var spec = TimelessJewelCatalog.Read(jewel, ItemsFor(conn).Mods);
-            await conn.Commands!.Reply($"{entry.Name} (seed {spec?.DisplayedSeed}, {spec?.ConquerorName}) added to the inventory");
+            var spec = TimelessJewelCatalog.Read(jewel, ItemsFor(player).Mods);
+            await player.Commands!.Reply($"{entry.Name} (seed {spec?.DisplayedSeed}, {spec?.ConquerorName}) added to the inventory");
         })
         .Add("voices", "/voices [1|3|5|7] (dev: the Voices unique Large Cluster Jewel with that many empty passives, into the inventory)", async args =>
         {
             int empty = args.Length > 0 && int.TryParse(args[0], out int value) ? value : 7;
             if (CreateVoices(empty) is not { } jewel)
             {
-                await conn.Commands!.Reply("Voices needs 1, 3, 5 or 7 empty passives");
+                await player.Commands!.Reply("Voices needs 1, 3, 5 or 7 empty passives");
                 return;
             }
-            var items = ItemsOf(conn);
+            var items = ItemsOf(player);
             if (items.FreeCell(PlayerInventories.MainInventory, 1, 1, ShapeOf) is not { } cell)
             {
-                await conn.Commands!.Reply("No room in the inventory");
+                await player.Commands!.Reply("No room in the inventory");
                 return;
             }
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, jewel));
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /voices {empty}");
-            await conn.Commands!.Reply($"Voices ({empty} empty passive(s)) added to the inventory");
+            await player.Commands!.Reply($"Voices ({empty} empty passive(s)) added to the inventory");
         })
         .Add("cluster_jewel", "/cluster_jewel <small|medium|large> [passives] [sockets] [theme] [mod ...] (dev: a non-unique cluster jewel into the inventory. theme: its name with underscores, e.g. fire_damage, or none; without one it gets one of its size's. mod: Mods Ids of its affixes, e.g. a notable's. Defaults: 3/4/8 passives and 0/1/2 sockets)", async args =>
         {
@@ -715,7 +642,7 @@ static class GmCommands
             } : -1;
             if (size < 0)
             {
-                await conn.Commands!.Reply("small, medium or large");
+                await player.Commands!.Reply("small, medium or large");
                 return;
             }
             int passives = args.Length > 1 && int.TryParse(args[1], out int p) ? p : size switch { 2 => 8, 1 => 4, _ => 3 };
@@ -724,52 +651,52 @@ static class GmCommands
             int numbers = args.Skip(1).TakeWhile(a => int.TryParse(a, out _)).Take(2).Count();
             if (CreateClusterJewel(size, passives, sockets, args.Skip(1 + numbers), out string? why) is not { } jewel)
             {
-                await conn.Commands!.Reply(why ?? "The cluster jewel data is missing");
+                await player.Commands!.Reply(why ?? "The cluster jewel data is missing");
                 return;
             }
-            var items = ItemsOf(conn);
+            var items = ItemsOf(player);
             if (items.FreeCell(PlayerInventories.MainInventory, 1, 1, ShapeOf) is not { } cell)
             {
-                await conn.Commands!.Reply("No room in the inventory");
+                await player.Commands!.Reply("No room in the inventory");
                 return;
             }
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, jewel));
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]), $"0x00bf inventory 1: /cluster_jewel {size} {passives} {sockets}");
-            string themeName = ItemsFor(conn).ByHash(jewel.TypeHash) is { } made && ClusterJewels.ThemeOf(made, jewel) is { } theme ? theme.Name : "no theme";
-            await conn.Commands!.Reply($"Cluster jewel ({args[0]}, {themeName}, {passives} passive(s), {sockets} socket(s)) added to the inventory");
+            string themeName = ItemsFor(player).ByHash(jewel.TypeHash) is { } made && ClusterJewels.ThemeOf(made, jewel) is { } theme ? theme.Name : "no theme";
+            await player.Commands!.Reply($"Cluster jewel ({args[0]}, {themeName}, {passives} passive(s), {sockets} socket(s)) added to the inventory");
         })
         .Add("corrupt", "/corrupt (dev: marks the held item corrupted, e.g. to make a corrupted magic jewel)", async _ =>
         {
-            var items = ItemsOf(conn);
-            if (items.Items(PlayerInventories.Cursor) is not [var held, ..]) { await conn.Commands!.Reply("Hold an item first"); return; }
+            var items = ItemsOf(player);
+            if (items.Items(PlayerInventories.Cursor) is not [var held, ..]) { await player.Commands!.Reply("Hold an item first"); return; }
             if (items.Change(PlayerInventories.Cursor, held.Id, it => it with { Corrupted = true }) is not { } changed) return;
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Cursor),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Cursor),
                 items.NextRevision(PlayerInventories.Cursor), [held.Id], [changed]), "0x00bf cursor: corrupted");
-            await conn.Commands!.Reply("Corrupted");
+            await player.Commands!.Reply("Corrupted");
         })
         .Add("gem", "/gem <name> [level] [quality] (a gem into the inventory at that level and quality, e.g. /gem Fireball 20 20, /gem Ice Nova of Frostbolts, /gem Vaal Fireball 5)", async args =>        {
             // The trailing numbers: the level, then the quality.
             var numbers = new List<int>();
             while (args.Length > 1 && numbers.Count < 2 && int.TryParse(args[^1], out int n)) { numbers.Insert(0, n); args = args[..^1]; }
             if (args.Length == 0) throw new ArgumentException("which gem?");
-            if (ItemsFor(conn).Error is { } error) { await conn.Commands!.Reply(error); return; }
+            if (ItemsFor(player).Error is { } error) { await player.Commands!.Reply(error); return; }
             string query = string.Join(' ', args);
-            if (ItemsFor(conn).FindGem(query) is not var (type, variant) || ItemsFor(conn).Gem(type) is not { } gem) { await conn.Commands!.Reply($"No gem \"{query}\""); return; }
+            if (ItemsFor(player).FindGem(query) is not var (type, variant) || ItemsFor(player).Gem(type) is not { } gem) { await player.Commands!.Reply($"No gem \"{query}\""); return; }
             if (!type.Supported)
             {
-                await conn.Commands!.Reply($"{variant.Name} has components the server cannot write yet: {string.Join(", ", type.Components.Where(c => !Item.Supported.Contains(c)))}");
+                await player.Commands!.Reply($"{variant.Name} has components the server cannot write yet: {string.Join(", ", type.Components.Where(c => !Item.Supported.Contains(c)))}");
                 return;
             }
             int level = numbers.Count > 0 ? numbers[0] : 1, quality = numbers.Count > 1 ? numbers[1] : 0;
             // Corruption (one level over the cap, quality up to 23%) is not modelled yet: the uncorrupted limits.
-            if (level < 1 || level > gem.MaxLevel) { await conn.Commands!.Reply($"{variant.Name} has levels 1 to {gem.MaxLevel}"); return; }
-            if (quality is < 0 or > 20) { await conn.Commands!.Reply("Quality is 0 to 20"); return; }
-            var items = ItemsOf(conn);
-            if (items.FreeCell(PlayerInventories.MainInventory, type.Width, type.Height, ShapeOf) is not { } cell) { await conn.Commands!.Reply("No room in the inventory"); return; }
+            if (level < 1 || level > gem.MaxLevel) { await player.Commands!.Reply($"{variant.Name} has levels 1 to {gem.MaxLevel}"); return; }
+            if (quality is < 0 or > 20) { await player.Commands!.Reply("Quality is 0 to 20"); return; }
+            var items = ItemsOf(player);
+            if (items.FreeCell(PlayerInventories.MainInventory, type.Width, type.Height, ShapeOf) is not { } cell) { await player.Commands!.Reply("No room in the inventory"); return; }
             var created = ItemCatalog.Create(type) with { GemExperience = gem.ExperienceFor(level), GemVariant = variant.Index, Quality = (byte)quality };
             var added = items.Put(PlayerInventories.MainInventory, new InventoryItem(items.NewItemId(), cell.X, cell.Y, created));
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
+            await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), [], [added]),
                 $"0x00bf inventory 1: /gem {variant.Name} (variant {variant.Index}) level {level}, {quality}% quality, experience {created.GemExperience}");
         }, "gem")
@@ -778,51 +705,51 @@ static class GmCommands
             if (args.Length != 1) throw new ArgumentException("an amount, or near");
             bool near = args[0].Equals("near", StringComparison.OrdinalIgnoreCase);
             int amount = near ? 0 : int.Parse(args[0]);
-            var items = ItemsOf(conn);
+            var items = ItemsOf(player);
             int Set(Item gem, ItemCatalog.GemType type)
             {
-                int level = ItemsFor(conn).GemLevel(gem);
-                int max = Math.Min(SkillsFor(conn).MaxLevelAt(type.Variant(gem.GemVariant).Effect, conn.Pools.Level), type.MaxLevel);
+                int level = ItemsFor(player).GemLevel(gem);
+                int max = Math.Min(SkillsFor(player).MaxLevelAt(type.Variant(gem.GemVariant).Effect, player.Pools.Level), type.MaxLevel);
                 return near ? (level < max ? type.ExperienceFor(level + 1) - 1 : gem.GemExperience) : amount;
             }
             var changed = new List<(byte Row, InventoryItem Item)>();
             foreach (var held in items.Items(PlayerInventories.MainInventory))
-                if (ItemsFor(conn).ByHash(held.Item.TypeHash) is { } baseType && ItemsFor(conn).Gem(baseType) is { } type)
+                if (ItemsFor(player).ByHash(held.Item.TypeHash) is { } baseType && ItemsFor(player).Gem(baseType) is { } type)
                     if (items.Change(PlayerInventories.MainInventory, held.Id, it => it with { GemExperience = Set(it, type) }) is { } after)
                         changed.Add((PlayerInventories.MainInventory, after));
             foreach (var (row, item, _) in items.ChangeSocketedGems((_, gem) =>
-                ItemsFor(conn).ByHash(gem.TypeHash) is { } baseType && ItemsFor(conn).Gem(baseType) is { } type ? gem with { GemExperience = Set(gem, type) } : null))
+                ItemsFor(player).ByHash(gem.TypeHash) is { } baseType && ItemsFor(player).Gem(baseType) is { } type ? gem with { GemExperience = Set(gem, type) } : null))
                 changed.Add((row, item));
-            if (changed.Count == 0) { await conn.Commands!.Reply("No gem to change"); return; }
+            if (changed.Count == 0) { await player.Commands!.Reply("No gem to change"); return; }
             foreach (var row in changed.GroupBy(c => c.Row))
-                await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(row.Key), items.NextRevision(row.Key),
+                await Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(row.Key), items.NextRevision(row.Key),
                     [.. row.Select(c => c.Item.Id)], [.. row.Select(c => c.Item)]),
                     $"0x00bf inventory {row.Key}: /gem_xp {(near ? "near" : amount.ToString())} ({string.Join(", ", row.Select(c => $"{c.Item.Id:x} exp {c.Item.Item.GemExperience}"))})");
         })
         .Add("map_portal", "/map_portal [type 1-4] [created 0|1] [open after ms, -1 never] [model 0-2] (dev: one MultiplexPortal next to you, listed in the map device's 0x8f)", async args =>
         {
-            if (args.Length > 3) conn.MapPortalStyle = byte.Parse(args[3]);
+            if (args.Length > 3) player.MapPortalStyle = byte.Parse(args[3]);
             byte type = args.Length > 0 ? byte.Parse(args[0]) : MapPortalObject.MapDevicePortal;
             byte created = args.Length > 1 ? byte.Parse(args[1]) : (byte)1;
             int openMs = args.Length > 2 ? int.Parse(args[2]) : -1;
-            var (x, y) = conn.SpawnNear(conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds));
-            uint id = conn.NextObjectId++;
-            await Send(remote, stream, ciphers, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(MapPortalObject.MetadataPath),
-                new MapPortalObject(x, y, 0, type, created, Rotation: conn.PortalRotationRadians).Blob()),
+            var (x, y) = player.SpawnNear(player.Walk.Position(player.Clock.Elapsed.TotalSeconds));
+            uint id = player.NextObjectId++;
+            await Send(player, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(MapPortalObject.MetadataPath),
+                new MapPortalObject(x, y, 0, type, created, Rotation: player.PortalRotationRadians).Blob()),
                 $"0x02bb create test portal 0x{id:x} type {type}, transitionable {created}, at ({x}, {y})");
-            await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(id), null);
-            lock (conn.MapPortals) conn.MapPortals[id] = (x, y, -1);
-            if (openMs >= 0) OpenMapPortalLater(remote, stream, ciphers, conn, id, openMs);
+            await Send(player, InstanceProtocol.EnterWakeZone(id), null);
+            lock (player.MapPortals) player.MapPortals[id] = (x, y, -1);
+            if (openMs >= 0) OpenMapPortalLater(player, id, openMs);
             uint deviceId;
-            lock (conn.HideoutDoodads) deviceId = conn.HideoutDoodads.Keys.FirstOrDefault();
-            if (deviceId != 0) SendMapPortalsLater(remote, stream, ciphers, conn, deviceId, MapDevice.OpenOf(CharacterName(conn))?.Area.Hash16 ?? conn.Layout.Hash, MapPortalListMs);
-            await conn.Commands!.Reply($"Portal 0x{id:x}: type {type}, created {created}, " + (openMs >= 0 ? $"opens after {openMs} ms" : "not opened"));
+            lock (player.HideoutDoodads) deviceId = player.HideoutDoodads.Keys.FirstOrDefault();
+            if (deviceId != 0) SendMapPortalsLater(player, deviceId, MapDevice.OpenOf(CharacterName(player))?.Area.Hash16 ?? player.Layout.Hash, MapPortalListMs);
+            await player.Commands!.Reply($"Portal 0x{id:x}: type {type}, created {created}, " + (openMs >= 0 ? $"opens after {openMs} ms" : "not opened"));
         })
         .Add("cosmetic", "/cosmetic portal <name, number or part of a name> | /cosmetic list [filter] | /cosmetic off (the portal cosmetic: the shop effect replaces the base portal visual)", async args =>
         {
             if (args.Length == 0)
             {
-                await conn.Commands!.Reply($"{Cosmetics.Portals.Count} portal effects. " +
+                await player.Commands!.Reply($"{Cosmetics.Portals.Count} portal effects. " +
                     "/cosmetic list <part of a name> lists the ones that have it, /cosmetic portal <number or name> applies one.");
                 return;
             }
@@ -830,10 +757,10 @@ static class GmCommands
             if (what is not ("list" or "portal" or "off")) throw new ArgumentException("list, portal or off");
             if (what == "off")
             {
-                conn.CosmeticPortalVariation = 0;
-                CharacterSaves.SetPortalCosmetic(CharacterName(conn), 0);
-                bool back = await ResendMapPortals(remote, stream, ciphers, conn);
-                await conn.Commands!.Reply(back
+                player.Character.CosmeticPortalVariation = 0;
+                CharacterSaves.SetPortalCosmetic(CharacterName(player), 0);
+                bool back = await ResendMapPortals(player);
+                await player.Commands!.Reply(back
                     ? "Portal cosmetic off: the open portals are back to the base effect."
                     : "Portal cosmetic off: the next portal uses the base effect.");
                 return;
@@ -842,7 +769,7 @@ static class GmCommands
             if (what == "list")
             {
                 var shown = filter.Length == 0 ? Cosmetics.Portals : CosmeticCatalog.Matches(Cosmetics.Portals, filter);
-                await conn.Commands!.Reply(shown.Count == 0
+                await player.Commands!.Reply(shown.Count == 0
                     ? Cosmetics.Portals.Count == 0 ? "No portal effects: data/tables is missing." : $"No portal effects match \"{filter}\"."
                     : $"{shown.Count} portal effects: " + string.Join(", ", shown.Take(12).Select(c => c.ToString())) + (shown.Count > 12 ? ", ..." : ""));
                 return;
@@ -850,7 +777,7 @@ static class GmCommands
             if (filter.Length == 0)
             {
                 // Nothing named: the first page of the list, so the numbers that pick one are right there.
-                await conn.Commands!.Reply($"{Cosmetics.Portals.Count} portal effects: " + string.Join(", ", Cosmetics.Portals.Take(12)) +
+                await player.Commands!.Reply($"{Cosmetics.Portals.Count} portal effects: " + string.Join(", ", Cosmetics.Portals.Take(12)) +
                     (Cosmetics.Portals.Count > 12 ? ", ..." : "") + " — use a number, a name or a piece of one.");
                 return;
             }
@@ -860,7 +787,7 @@ static class GmCommands
             {
                 // Several contain what was typed: name them with the numbers that pick one, rather than guessing which was
                 // meant. The next /cosmetic with one of the numbers (or a longer fragment) applies it.
-                await conn.Commands!.Reply($"{matches.Count} portal effects match \"{filter}\": " +
+                await player.Commands!.Reply($"{matches.Count} portal effects match \"{filter}\": " +
                     string.Join(", ", matches.Take(12).Select(c => c.ToString())) + (matches.Count > 12 ? ", ..." : "") +
                     ". Add more of the name, or use one of the numbers.");
                 return;
@@ -868,20 +795,20 @@ static class GmCommands
             var cosmetic = matches[0];
             // A portal cosmetic is the portal's own variation (+0x26 of its 0x008f entry), not a second object: the client
             // swaps the base portal effect for the shop one.
-            conn.CosmeticPortalVariation = (ushort)cosmetic.Index;
-            CharacterSaves.SetPortalCosmetic(CharacterName(conn), conn.CosmeticPortalVariation);   // survives a relog
-            bool applied = await ResendMapPortals(remote, stream, ciphers, conn);
-            await conn.Commands!.Reply($"portal: {cosmetic.Name} (variation {cosmetic.Index})" +
+            player.Character.CosmeticPortalVariation = (ushort)cosmetic.Index;
+            CharacterSaves.SetPortalCosmetic(CharacterName(player), player.Character.CosmeticPortalVariation);   // survives a relog
+            bool applied = await ResendMapPortals(player);
+            await player.Commands!.Reply($"portal: {cosmetic.Name} (variation {cosmetic.Index})" +
                 (applied ? ", applied to the open portals" : ", the next portal uses it"));
         })
         .Add("portal_rotation", "/portal_rotation <degrees> (dev: turn the map portals around the vertical axis; rebuilds the ones standing)", async args =>
         {
             if (args.Length == 0) throw new ArgumentException("degrees");
-            conn.PortalRotationDegrees = float.Parse(args[0], System.Globalization.CultureInfo.InvariantCulture);
-            int rebuilt = await RebuildMapPortals(remote, stream, ciphers, conn);
-            await conn.Commands!.Reply(rebuilt == 0
-                ? $"Map portals will be created at {conn.PortalRotationDegrees:0.#}°."
-                : $"{rebuilt} map portal(s) rebuilt at {conn.PortalRotationDegrees:0.#}°.");
+            player.PortalRotationDegrees = float.Parse(args[0], System.Globalization.CultureInfo.InvariantCulture);
+            int rebuilt = await RebuildMapPortals(player);
+            await player.Commands!.Reply(rebuilt == 0
+                ? $"Map portals will be created at {player.PortalRotationDegrees:0.#}°."
+                : $"{rebuilt} map portal(s) rebuilt at {player.PortalRotationDegrees:0.#}°.");
         })
         .Add("item_mod", "/item_mod [implicit|explicit|enchant|scourge|hidden] <Mods row, Id or part of it> [values…] | /item_mod set [section] <mod> [values…] | /item_mod remove [section] <mod> | /item_mod clear [section] (the held item; missing values are rolled)", async args =>
         {
@@ -893,23 +820,23 @@ static class GmCommands
                 if (args.Length == 0) throw new ArgumentException("which mod?");
                 ModSection? setSection = null;
                 if (args.Length > 1 && ParseSection(args[0]) is { } parsed) { setSection = parsed; args = args[1..]; }
-                if (ItemsFor(conn).Mods.Find(args[0]) is not { } setMod) { await conn.Commands!.Reply($"No mod \"{args[0]}\" in Mods.dat"); return; }
-                if (ItemsOf(conn).Items(PlayerInventories.Cursor) is not [var held, ..]) { await conn.Commands!.Reply("Hold an item first"); return; }
+                if (ItemsFor(player).Mods.Find(args[0]) is not { } setMod) { await player.Commands!.Reply($"No mod \"{args[0]}\" in Mods.dat"); return; }
+                if (ItemsOf(player).Items(PlayerInventories.Cursor) is not [var held, ..]) { await player.Commands!.Reply("Hold an item first"); return; }
                 var setValues = args[1..].Select(int.Parse).ToList();
                 var replacement = setMod.With(setSection ?? setMod.DefaultSection, setValues, Random.Shared);
                 int existing = held.Item.Mods.Select((m, index) => (m, index))
                     .Where(p => p.m.Hash == replacement.Hash && (setSection is null || p.m.Section == setSection))
                     .Select(p => p.index).DefaultIfEmpty(-1).First();
-                if (existing < 0) { await conn.Commands!.Reply($"The held item has no {setMod.Id}; use /item_mod to add it"); return; }
+                if (existing < 0) { await player.Commands!.Reply($"The held item has no {setMod.Id}; use /item_mod to add it"); return; }
                 var targetSection = held.Item.Mods[existing].Section;
                 replacement = replacement with { Section = targetSection };
-                await ChangeHeldItem(remote, stream, ciphers, conn, i =>
+                await ChangeHeldItem(player, i =>
                 {
                     var mods = i.Mods.ToList();
                     int index = mods.FindIndex(m => m.Hash == replacement.Hash && m.Section == targetSection);
                     if (index >= 0) mods[index] = replacement;
                     return i with { Mods = mods };
-                }, $"set {ItemsFor(conn).Mods.Describe(replacement)}");
+                }, $"set {ItemsFor(player).Mods.Describe(replacement)}");
                 return;
             }
             if (args[0].Equals("remove", StringComparison.OrdinalIgnoreCase))
@@ -918,107 +845,107 @@ static class GmCommands
                 if (args.Length == 0) throw new ArgumentException("which mod?");
                 ModSection? removeSection = null;
                 if (args.Length > 1 && ParseSection(args[0]) is { } parsed) { removeSection = parsed; args = args[1..]; }
-                if (ItemsFor(conn).Mods.Find(args[0]) is not { } removeMod) { await conn.Commands!.Reply($"No mod \"{args[0]}\" in Mods.dat"); return; }
-                if (ItemsOf(conn).Items(PlayerInventories.Cursor) is not [var held, ..]) { await conn.Commands!.Reply("Hold an item first"); return; }
-                if (!ItemModEdits.Contains(held.Item, removeMod.Hash, removeSection)) { await conn.Commands!.Reply($"The held item has no {removeMod.Id}"); return; }
+                if (ItemsFor(player).Mods.Find(args[0]) is not { } removeMod) { await player.Commands!.Reply($"No mod \"{args[0]}\" in Mods.dat"); return; }
+                if (ItemsOf(player).Items(PlayerInventories.Cursor) is not [var held, ..]) { await player.Commands!.Reply("Hold an item first"); return; }
+                if (!ItemModEdits.Contains(held.Item, removeMod.Hash, removeSection)) { await player.Commands!.Reply($"The held item has no {removeMod.Id}"); return; }
                 var removed = held.Item.Mods.First(m => m.Hash == removeMod.Hash && (removeSection is null || m.Section == removeSection));
-                await ChangeHeldItem(remote, stream, ciphers, conn,
+                await ChangeHeldItem(player,
                     i => ItemModEdits.Remove(i, removeMod.Hash, removeSection),
-                    $"removed {ItemsFor(conn).Mods.Describe(removed)}");
+                    $"removed {ItemsFor(player).Mods.Describe(removed)}");
                 return;
             }
             if (args.Length > 1 && ParseSection(args[0]) is { } s) { section = s; args = args[1..]; }
             if (args[0].Equals("clear", StringComparison.OrdinalIgnoreCase))
             {
                 var only = args.Length > 1 ? ParseSection(args[1]) : section;
-                await ChangeHeldItem(remote, stream, ciphers, conn, i => i with { Mods = [.. i.Mods.Where(m => only is { } o && m.Section != o)] },
+                await ChangeHeldItem(player, i => i with { Mods = [.. i.Mods.Where(m => only is { } o && m.Section != o)] },
                     $"mods cleared{(only is { } o ? $" ({o})" : "")}");
                 return;
             }
-            if (ItemsFor(conn).Mods.Find(args[0]) is not { } mod) { await conn.Commands!.Reply($"No mod \"{args[0]}\" in Mods.dat"); return; }
+            if (ItemsFor(player).Mods.Find(args[0]) is not { } mod) { await player.Commands!.Reply($"No mod \"{args[0]}\" in Mods.dat"); return; }
             var values = args[1..].Select(int.Parse).ToList();
             var added = mod.With(section ?? mod.DefaultSection, values, Random.Shared);
-            await ChangeHeldItem(remote, stream, ciphers, conn, i => i with { Mods = [.. i.Mods, added] }, $"+ {ItemsFor(conn).Mods.Describe(added)}");
+            await ChangeHeldItem(player, i => i with { Mods = [.. i.Mods, added] }, $"+ {ItemsFor(player).Mods.Describe(added)}");
         })
         .Add("roll", "/roll <magic|rare> [item level] (new affixes and name for the held item)", async args =>
         {
             if (args.Length == 0 || !Enum.TryParse<ItemRarity>(args[0], true, out var rarity) || rarity is not (ItemRarity.Magic or ItemRarity.Rare))
                 throw new ArgumentException("magic or rare");
             byte? level = args.Length > 1 ? byte.Parse(args[1]) : null;
-            await ChangeHeldItem(remote, stream, ciphers, conn, i => RollsFor(conn).Roll(level is byte l ? i with { ItemLevel = l } : i, rarity, Random.Shared),
+            await ChangeHeldItem(player, i => RollsFor(player).Roll(level is byte l ? i with { ItemLevel = l } : i, rarity, Random.Shared),
                 $"rolled {rarity}");
         })
         .Add("item_max", "/item_max (the held item as well rolled as it can be: every implicit and explicit value at the top of its range, a magic or rare item's affixes at their best tier for its item level, the top base defence roll on armour; a value that picks something, as a Timeless Jewel's seed, stays)", async _ =>
-            await ChangeHeldItem(remote, stream, ciphers, conn, i => MaxRolled(conn, i), "as well rolled as it can be"))
+            await ChangeHeldItem(player, i => MaxRolled(player, i), "as well rolled as it can be"))
         .Add("item_mods", "/item_mods (the held item's rarity and mods)", async args =>
         {
-            if (ItemsOf(conn).Items(PlayerInventories.Cursor) is not [var held, ..]) { await conn.Commands!.Reply("Hold an item first"); return; }
-            await conn.Commands!.Reply($"{(held.Item.NameWords.Count > 0 ? RollsFor(conn).NameOf(held.Item.NameWords) + ", " : "")}" +
-                $"{ItemsFor(conn).ByHash(held.Item.TypeHash)?.Name} ilvl {held.Item.ItemLevel}, {held.Item.Rarity}" +
+            if (ItemsOf(player).Items(PlayerInventories.Cursor) is not [var held, ..]) { await player.Commands!.Reply("Hold an item first"); return; }
+            await player.Commands!.Reply($"{(held.Item.NameWords.Count > 0 ? RollsFor(player).NameOf(held.Item.NameWords) + ", " : "")}" +
+                $"{ItemsFor(player).ByHash(held.Item.TypeHash)?.Name} ilvl {held.Item.ItemLevel}, {held.Item.Rarity}" +
                 $"{(held.Item.Identified ? "" : ", unidentified")}: " +
-                (held.Item.Mods.Count == 0 ? "no mods" : string.Join("; ", held.Item.Mods.Select(ItemsFor(conn).Mods.Describe))));
+                (held.Item.Mods.Count == 0 ? "no mods" : string.Join("; ", held.Item.Mods.Select(ItemsFor(player).Mods.Describe))));
         })
         .Add("base_defence", "/base_defence [0 to 31] (show or set the held armour's shared defence base roll)", async args =>
         {
-            if (ItemsOf(conn).Items(PlayerInventories.Cursor) is not [var held, ..])
-            { await conn.Commands!.Reply("Hold an armour item first"); return; }
+            if (ItemsOf(player).Items(PlayerInventories.Cursor) is not [var held, ..])
+            { await player.Commands!.Reply("Hold an armour item first"); return; }
             if (!held.Item.Components.Contains("Armour"))
-            { await conn.Commands!.Reply("The held item has no Armour component"); return; }
+            { await player.Commands!.Reply("The held item has no Armour component"); return; }
             if (args.Length == 0)
-            { await conn.Commands!.Reply($"Defence base roll: {held.Item.DefenceBaseRoll} (ordinary range 0 to 31)"); return; }
+            { await player.Commands!.Reply($"Defence base roll: {held.Item.DefenceBaseRoll} (ordinary range 0 to 31)"); return; }
             if (args.Length != 1 || !byte.TryParse(args[0], out byte roll) || roll > Item.MaximumDefenceBaseRoll)
                 throw new ArgumentException("defence base roll 0 to 31");
-            await ChangeHeldItem(remote, stream, ciphers, conn, i => i with { DefenceBaseRoll = roll },
+            await ChangeHeldItem(player, i => i with { DefenceBaseRoll = roll },
                 $"defence base roll {roll} / {Item.MaximumDefenceBaseRoll}", "Armour");
         })
         .Add("item_state", "/item_state [corrupted|mirrored|split|synthesised|shaper|elder|crusader|redeemer|hunter|warlord|clear …] (switches them on the held item; without a state, shows them)", async args =>
         {
-            if (ItemsOf(conn).Items(PlayerInventories.Cursor) is not [var held, ..]) { await conn.Commands!.Reply("Hold an item first"); return; }
-            if (args.Length == 0) { await conn.Commands!.Reply(ItemStates.Describe(held.Item)); return; }
+            if (ItemsOf(player).Items(PlayerInventories.Cursor) is not [var held, ..]) { await player.Commands!.Reply("Hold an item first"); return; }
+            if (args.Length == 0) { await player.Commands!.Reply(ItemStates.Describe(held.Item)); return; }
             var result = args.Aggregate(held.Item, (item, state) => ItemStates.Toggle(item, state) ?? throw new ArgumentException($"no state {state}"));
-            await ChangeHeldItem(remote, stream, ciphers, conn, i => args.Aggregate(i, (item, state) => ItemStates.Toggle(item, state)!),
+            await ChangeHeldItem(player, i => args.Aggregate(i, (item, state) => ItemStates.Toggle(item, state)!),
                 ItemStates.Describe(result), args.Any(ItemStates.NeedsMods) ? "Mods" : "Base");
         })
         .Add("rarity", "/rarity <normal|magic|rare|unique> [unid] (the held item)", async args =>
         {
             if (args.Length == 0 || !Enum.TryParse<ItemRarity>(args[0], true, out var rarity)) throw new ArgumentException("normal, magic, rare or unique");
             bool identified = !args.Skip(1).Any(a => a.StartsWith("unid", StringComparison.OrdinalIgnoreCase));
-            await ChangeHeldItem(remote, stream, ciphers, conn, i => i with { Rarity = rarity, Identified = identified },
+            await ChangeHeldItem(player, i => i with { Rarity = rarity, Identified = identified },
                 $"{rarity}{(identified ? "" : ", unidentified")}");
         })
         .Add("sockets", "/sockets [colours] (the held item's sockets: R G B W, linked within a word, e.g. /sockets RRGBBB a 6-link, /sockets RRG B a 3-link and a single; without colours, shows them; Game_SOCKET_CAPACITY=1..6 lets any socketable base take that many, e.g. a 6-link wand)", async args =>
         {
-            if (ItemsOf(conn).Items(PlayerInventories.Cursor) is not [var held, ..]) { await conn.Commands!.Reply("Hold an item first"); return; }
-            if (args.Length == 0) { await conn.Commands!.Reply($"sockets: {SocketLayout.Describe(held.Item)}"); return; }
-            if (ItemsFor(conn).ByHash(held.Item.TypeHash) is not { } type) { await conn.Commands!.Reply("Unknown item type"); return; }
+            if (ItemsOf(player).Items(PlayerInventories.Cursor) is not [var held, ..]) { await player.Commands!.Reply("Hold an item first"); return; }
+            if (args.Length == 0) { await player.Commands!.Reply($"sockets: {SocketLayout.Describe(held.Item)}"); return; }
+            if (ItemsFor(player).ByHash(held.Item.TypeHash) is not { } type) { await player.Commands!.Reply("Unknown item type"); return; }
             if (SocketLayout.Parse(args, out string? error) is not var (colours, links)) throw new ArgumentException(error);
             int capacity = SocketLayout.CapacityOverride;
-            if (SocketLayout.Apply(held.Item, type, colours, links, out error, capacity) is not { } result) { await conn.Commands!.Reply(error!); return; }
-            await ChangeHeldItem(remote, stream, ciphers, conn, i => SocketLayout.Apply(i, type, colours, links, out _, capacity) ?? i,
+            if (SocketLayout.Apply(held.Item, type, colours, links, out error, capacity) is not { } result) { await player.Commands!.Reply(error!); return; }
+            await ChangeHeldItem(player, i => SocketLayout.Apply(i, type, colours, links, out _, capacity) ?? i,
                 $"sockets: {SocketLayout.Describe(result)}", "Sockets");
         })
         .Add("set_level", "/set_level <1 to 100> (saved to the account; the level's experience and stats are sent at once)", async args =>
         {
             if (args.Length == 0 || !int.TryParse(args[0], out int level) || level is < 1 or > 100) throw new ArgumentException("level 1 to 100");
-            await SetLevel(remote, stream, ciphers, conn, level);
-            var r = await SynchronizeAccountLevel(conn);
-            if (!r.Ok) await conn.Commands!.Reply($"Level saved locally; account update failed: {r.Error}");
+            await SetLevel(player, level);
+            var r = await SynchronizeAccountLevel(player);
+            if (!r.Ok) await player.Commands!.Reply($"Level saved locally; account update failed: {r.Error}");
         })
         .Add("add_xp", "/add_xp <amount> (experience as from a kill: levels up, saved)", async args =>
         {
             if (args.Length == 0 || !uint.TryParse(args[0], out uint xp) || xp == 0) throw new ArgumentException("an amount of experience");
-            await GainExperience(remote, stream, ciphers, conn, xp, "/add_xp");
+            await GainExperience(player, xp, "/add_xp");
         })
         .Add("ascendancy", "/ascendancy [normal|phrecia] [name] (list or choose an available ascendancy)", async args =>
         {
-            byte baseClass = (byte)Skills.ClassFor(conn.ClassRow).IntegerId;
-            var choices = Ascendancies.Choices(baseClass).Where(c => AscendancyPolicies.Available(conn, c.Identity)).ToArray();
+            byte baseClass = (byte)Skills.ClassFor(player.Character.ClassRow).IntegerId;
+            var choices = Ascendancies.Choices(baseClass).Where(c => AscendancyPolicies.Available(player, c.Identity)).ToArray();
             if (choices.Length == 0) throw new ArgumentException("ascendancy data is missing; run scripts/dev/extract-data.ps1");
             if (args.Length == 0)
             {
-                var current = Game.AscendancyRules.Validate(baseClass, conn.MainAscendancy);
-                int spent = Game.AscendancyRules.SpentPoints(baseClass, conn.MainAscendancy);
-                await conn.Commands!.Reply($"Main ascendancy - {current?.Name ?? "none"}. Ascendancy points {spent}/{conn.MainAscendancy.EarnedPoints}.\n" +
+                var current = Game.AscendancyRules.Validate(baseClass, player.Character.MainAscendancy);
+                int spent = Game.AscendancyRules.SpentPoints(baseClass, player.Character.MainAscendancy);
+                await player.Commands!.Reply($"Main ascendancy - {current?.Name ?? "none"}. Ascendancy points {spent}/{player.Character.MainAscendancy.EarnedPoints}.\n" +
                     string.Join("\n", choices.Select(c => $"/ascendancy {c.Identity.Family.ToString().ToLowerInvariant()} {c.Name}")));
                 return;
             }
@@ -1028,28 +955,28 @@ static class GmCommands
                 (c.Name.Equals(name, StringComparison.OrdinalIgnoreCase) || c.Identity.Id.Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();
             if (matching.Length != 1) throw new ArgumentException("choose one name from /ascendancy, including its normal/phrecia family when needed");
             var chosen = matching[0];
-            AscendancyClientCompatibility.RequirePlayable(conn, chosen.Identity);
-            if (conn.MainAscendancy.Selection == chosen.Identity)
+            AscendancyClientCompatibility.RequirePlayable(player, chosen.Identity);
+            if (player.Character.MainAscendancy.Selection == chosen.Identity)
             {
-                await conn.Commands!.Reply($"{chosen.Name} is already your main ascendancy.");
+                await player.Commands!.Reply($"{chosen.Name} is already your main ascendancy.");
                 return;
             }
-            Game.SelectMainAscendancy(conn, chosen);
-            await conn.Commands!.Reply($"Main ascendancy selected - {chosen.Name}. Reloading the area to show its tree.");
-            await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(conn.Layout.Hash, 0, false), $"ascendancy {chosen.Name}");
+            Game.SelectMainAscendancy(player, chosen);
+            await player.Commands!.Reply($"Main ascendancy selected - {chosen.Name}. Reloading the area to show its tree.");
+            await ChangeArea(player, new PendingTransfer(player.Layout.Hash, 0, false), $"ascendancy {chosen.Name}");
         })
         .Add("ascendancy_points", "/ascendancy_points <normal|cruel|merciless|eternal|all> (dev: grant each Labyrinth's two ascendancy points once)", async args =>
         {
             if (args.Length != 1) throw new ArgumentException("a Labyrinth tier or all");
             string tier = args[0].ToLowerInvariant();
-            int earned = await Game.AwardAscendancyPoints(remote, stream, ciphers, conn, tier == "all" ? global::AscendancyRules.AwardKeys : [tier]);
-            await conn.Commands!.Reply($"Ascendancy points earned - {earned}; each tier can be earned once.");
+            int earned = await Game.AwardAscendancyPoints(player, tier == "all" ? global::AscendancyRules.AwardKeys : [tier]);
+            await player.Commands!.Reply($"Ascendancy points earned - {earned}; each tier can be earned once.");
         })
         .Add("reset_ascendancy", "/reset_ascendancy (refund all ascendancy nodes; five refund points per node/effect, choice shells are free)", async _ =>
         {
-            if (conn.MainAscendancy.Allocated.Count == 0) { await conn.Commands!.Reply("No ascendancy passives allocated."); return; }
-            var error = await ChangePassives(remote, stream, ciphers, conn, conn.MainAscendancy.Allocated.ToArray(), false, "/reset_ascendancy", refundPoints: true);
-            await conn.Commands!.Reply(error ?? "Ascendancy passives refunded; you can choose another main ascendancy.");
+            if (player.Character.MainAscendancy.Allocated.Count == 0) { await player.Commands!.Reply("No ascendancy passives allocated."); return; }
+            var error = await ChangePassives(player, player.Character.MainAscendancy.Allocated.ToArray(), false, "/reset_ascendancy", refundPoints: true);
+            await player.Commands!.Reply(error ?? "Ascendancy passives refunded; you can choose another main ascendancy.");
         })
         .Add("descendancy", "/descendancy [name|none|open [row|name]|refund <node|all>] (dev: the second ascendancy layer 0x33's spare byte selects: Affliction's Wildwood specialisations and the 3.29 Bloodline classes; open shows the client's Descendancy class selector)", async args =>
         {
@@ -1059,13 +986,13 @@ static class GmCommands
             async Task ClearAzmeriClass(byte keep)
             {
                 string[] stale = [.. new byte[] { 1, 2, 3 }.Where(r => r != keep)
-                    .Select(r => DescendancyCatalog.UnlockFlag(r)).OfType<string>().Where(conn.HasQuestFlag)];
-                if (stale.Length > 0) await SetQuestFlags(remote, stream, ciphers, conn, stale, on: false);
+                    .Select(r => DescendancyCatalog.UnlockFlag(r)).OfType<string>().Where(player.Character.HasQuestFlag)];
+                if (stale.Length > 0) await SetQuestFlags(player, stale, on: false);
             }
             if (args.Length == 0)
             {
-                var current = Game.Descendancies.Rows.FirstOrDefault(r => r.Index == conn.DescendancyRow);
-                await conn.Commands!.Reply($"Descendancy - {(current is { Index: > 0 } ? current.Name : "none")}.\n" +
+                var current = Game.Descendancies.Rows.FirstOrDefault(r => r.Index == player.Character.DescendancyRow);
+                await player.Commands!.Reply($"Descendancy - {(current is { Index: > 0 } ? current.Name : "none")}.\n" +
                     string.Join("\n", Game.Descendancies.Rows.Where(r => r.Index != 0).Select(r => $"/descendancy {r.Id}")));
                 return;
             }
@@ -1074,35 +1001,35 @@ static class GmCommands
                 // 0x7b kind 0x4c: the client's Descendancy class selector, with the Descendancy.dat row as its first u32.
                 byte descRow = args.Length > 1
                     ? Game.Descendancies.Find(args[1])?.Index ?? byte.Parse(args[1])
-                    : conn.DescendancyRow;
+                    : player.Character.DescendancyRow;
                 if (args.Length > 1 && Game.Descendancies.Rows.All(r => r.Index != descRow))
                     throw new ArgumentException("no such Descendancy row");
                 if (descRow == 0)
                     throw new ArgumentException("no Descendancy chosen; pass a row name or number, for example /descendancy open 6");
                 string descName = Game.Descendancies.Rows.FirstOrDefault(r => r.Index == descRow)?.Name ?? "?";
-                await conn.Commands!.Reply($"0x7b kind 0x4c row {descRow} ({descName})");
-                await Game.OpenDescendancySelector(remote, stream, ciphers, conn, descRow);
+                await player.Commands!.Reply($"0x7b kind 0x4c row {descRow} ({descName})");
+                await Game.OpenDescendancySelector(player, descRow);
                 return;
             }
             if (args[0].Equals("refund", StringComparison.OrdinalIgnoreCase))
             {
-                if (conn.DescendancyNodes.Count == 0) { await conn.Commands!.Reply("No descendancy nodes are allocated."); return; }
+                if (player.Character.DescendancyNodes.Count == 0) { await player.Commands!.Reply("No descendancy nodes are allocated."); return; }
                 ushort[] nodes = args.Length > 1 && !args[1].Equals("all", StringComparison.OrdinalIgnoreCase)
                     ? [ushort.Parse(args[1])]
-                    : [.. conn.DescendancyNodes];
+                    : [.. player.Character.DescendancyNodes];
                 foreach (ushort n in nodes)
-                    if (!conn.DescendancyNodes.Contains(n)) throw new ArgumentException($"{n} is not an allocated descendancy node");
-                string? refundError = await ChangePassives(remote, stream, ciphers, conn, nodes, allocate: false,
+                    if (!player.Character.DescendancyNodes.Contains(n)) throw new ArgumentException($"{n} is not an allocated descendancy node");
+                string? refundError = await ChangePassives(player, nodes, allocate: false,
                     "/descendancy refund", refundPoints: true);
-                await conn.Commands!.Reply(refundError ?? $"Refunded {nodes.Length} descendancy node(s).");
+                await player.Commands!.Reply(refundError ?? $"Refunded {nodes.Length} descendancy node(s).");
                 return;
             }
             if (args[0].Equals("none", StringComparison.OrdinalIgnoreCase))
             {
-                Game.SelectDescendancyForDevelopment(conn, 0);
+                Game.SelectDescendancyForDevelopment(player, 0);
                 await ClearAzmeriClass(keep: 0);
-                await conn.Commands!.Reply("Descendancy cleared. Reloading the area to show the change.");
-                await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(conn.Layout.Hash, 0, false), "descendancy none");
+                await player.Commands!.Reply("Descendancy cleared. Reloading the area to show the change.");
+                await ChangeArea(player, new PendingTransfer(player.Layout.Hash, 0, false), "descendancy none");
                 return;
             }
             string name = string.Join(' ', args);
@@ -1116,75 +1043,68 @@ static class GmCommands
                 3 => ["AzmeriArePrimalist", "PrimalistPassivePoints1", "PrimalistPassivePoints2", "PrimalistPassivePoints3", "PrimalistPassivePoints4"],
                 _ => [],
             };
-            Game.SelectDescendancyForDevelopment(conn, row.Index);
+            Game.SelectDescendancyForDevelopment(player, row.Index);
             await ClearAzmeriClass(keep: row.Index);
-            if (azmeri.Length > 0) await SetQuestFlags(remote, stream, ciphers, conn, azmeri);
-            await conn.Commands!.Reply($"Descendancy selected - {row.Name} (row {row.Index})" +
+            if (azmeri.Length > 0) await SetQuestFlags(player, azmeri);
+            await player.Commands!.Reply($"Descendancy selected - {row.Name} (row {row.Index})" +
                 (azmeri.Length > 0 ? " with its Azmeri flags" : "") + ". Reloading the area to show its tree.");
-            await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(conn.Layout.Hash, 0, false), $"descendancy {row.Name}");
+            await ChangeArea(player, new PendingTransfer(player.Layout.Hash, 0, false), $"descendancy {row.Name}");
         })
         .Add("gold", "/gold <amount> (dev: add gold, or take it with a negative amount; the account's, saved)", async args =>
         {
             if (args.Length == 0 || !long.TryParse(args[0], out long delta)) throw new ArgumentException("an amount of gold (negative takes gold)");
-            uint gold = PersonalStashOf(conn).AddGold(delta);
-            await Send(remote, stream, ciphers, InstanceEntities.Gold(gold), $"0x02aa gold: {gold} (/gold {delta})");
-            await conn.Commands!.Reply($"Gold: {gold}");
+            uint gold = PersonalStashOf(player).AddGold(delta);
+            await Send(player, InstanceEntities.Gold(gold), $"0x02aa gold: {gold} (/gold {delta})");
+            await player.Commands!.Reply($"Gold: {gold}");
         })
         .Add("add_passive_points", "/add_passive_points <n> (dev: add n extra passive skill points, saved)", async args =>
         {
             if (args.Length == 0 || !int.TryParse(args[0], out int add) || add <= 0) throw new ArgumentException("a positive number");
-            ushort total;
-            lock (conn.Monsters)
+            ushort total = Saves.Atomically(() =>
             {
-                total = Saves.Atomically(() =>
-                {
-                    ushort current = CharacterSaves.Load(CharacterName(conn))?.ExtraPassivePoints ?? 0;
-                    ushort next = (ushort)Math.Min(ushort.MaxValue, (long)current + add);
-                    CharacterSaves.SetExtraPassivePoints(CharacterName(conn), next);
-                    return next;
-                });
-                conn.ExtraPassivePoints = total;
-            }
-            await SendPassives(remote, stream, ciphers, conn);
-            await conn.Commands!.Reply($"{add} extra passive point(s) added; {total} extra total.");
+                ushort current = CharacterSaves.Load(CharacterName(player))?.ExtraPassivePoints ?? 0;
+                ushort next = (ushort)Math.Min(ushort.MaxValue, (long)current + add);
+                CharacterSaves.SetExtraPassivePoints(CharacterName(player), next);
+                return next;
+            });
+            player.Character.ExtraPassivePoints = total;
+            await SendPassives(player);
+            await player.Commands!.Reply($"{add} extra passive point(s) added; {total} extra total.");
         })
         .Add("add_refund_points", "/add_refund_points <n> (dev: add n refund points, saved)", async args =>
         {
             if (args.Length == 0 || !int.TryParse(args[0], out int add) || add <= 0) throw new ArgumentException("a positive number");
             ushort total = Saves.Atomically(() =>
             {
-                ushort next = (ushort)Math.Min(ushort.MaxValue, (CharacterSaves.Load(CharacterName(conn))?.RefundPoints ?? 0) + add);
-                CharacterSaves.SetRefundPoints(CharacterName(conn), next);
+                ushort next = (ushort)Math.Min(ushort.MaxValue, (CharacterSaves.Load(CharacterName(player))?.RefundPoints ?? 0) + add);
+                CharacterSaves.SetRefundPoints(CharacterName(player), next);
                 return next;
             });
-            lock (conn.Monsters)
-            {
-                conn.RefundPoints = total;
-                conn.SavedPassiveProgress = new(conn.MainAscendancy, conn.Passives, conn.MasteryEffects, total);
-            }
-            await SendPassives(remote, stream, ciphers, conn);
-            await conn.Commands!.Reply($"{add} refund point(s) added; {total} total.");
+            player.Character.RefundPoints = total;
+            player.Character.SavedPassiveProgress = new(player.Character.MainAscendancy, player.Character.Passives, player.Character.MasteryEffects, total);
+            await SendPassives(player);
+            await player.Commands!.Reply($"{add} refund point(s) added; {total} total.");
         })
         .Add("add_passive", "/add_passive <PassiveSkillGraphId> [...] (dev: allocate a connected set of passive nodes)", async args =>
         {
             if (args.Length == 0 || args.Any(a => !ushort.TryParse(a, out _))) throw new ArgumentException("PassiveSkillGraphId numbers");
             ushort[] nodes = [.. args.Select(ushort.Parse)];
-            string? error = await ChangePassives(remote, stream, ciphers, conn, nodes, allocate: true, "/add_passive");
-            await conn.Commands!.Reply(error ?? $"Passives {string.Join(", ", nodes)} allocated.");
+            string? error = await ChangePassives(player, nodes, allocate: true, "/add_passive");
+            await player.Commands!.Reply(error ?? $"Passives {string.Join(", ", nodes)} allocated.");
         })
         .Add("reset_passives", "/reset_passives (refunds every passive, saved)", async _ =>
         {
-            var (_, _, nodes, _) = PassiveState(conn);
-            await ChangePassives(remote, stream, ciphers, conn, nodes, allocate: false, "/reset_passives");
-            await conn.Commands!.Reply($"{nodes.Count} passive(s) refunded.");
+            var (_, _, nodes, _) = PassiveState(player);
+            await ChangePassives(player, nodes, allocate: false, "/reset_passives");
+            await player.Commands!.Reply($"{nodes.Count} passive(s) refunded.");
         })
         .Add("resistances", "/resistances (your uncapped and capped fire/cold/lightning/chaos resistance)", async _ =>
         {
-            var p = conn.Pools;
-            int penalty = ResistancePenalty(conn);
+            var p = player.Pools;
+            int penalty = ResistancePenalty(player);
             int fire = p.FireResistance + penalty, cold = p.ColdResistance + penalty;
             int lightning = p.LightningResistance + penalty, chaos = p.ChaosResistance + penalty;
-            await conn.Commands!.Reply(
+            await player.Commands!.Reply(
                 $"Kitava penalty {penalty}%. " +
                 $"Fire {fire}% (passives {p.FireResistance}%, max {p.FireMaxResistance}%, capped {DamageModel.Capped(fire, p.FireMaxResistance)}%), " +
                 $"Cold {cold}% (passives {p.ColdResistance}%, max {p.ColdMaxResistance}%, capped {DamageModel.Capped(cold, p.ColdMaxResistance)}%), " +
@@ -1196,40 +1116,40 @@ static class GmCommands
             if (args.Length < 2) throw new ArgumentException("a damage type and an amount");
             if (ParseDamageType(args[0]) is not { } type) throw new ArgumentException("fire, cold, lightning, chaos or physical");
             if (!int.TryParse(args[1], out int amount) || amount <= 0) throw new ArgumentException("a positive amount");
-            if (!TrySyntheticEnemyHit(conn, type, amount, false, false, false, out var hit,
+            if (!TrySyntheticEnemyHit(player, type, amount, false, false, false, out var hit,
                 ranged: args.Length > 2 && args[2] == "ranged"))
             {
-                await conn.Commands!.Reply(conn.PlayerLife == 0 ? "You are already dead." : "Enemy test hit rejected while paused or leaving.");
+                await player.Commands!.Reply(player.PlayerLife == 0 ? "You are already dead." : "Enemy test hit rejected while paused or leaving.");
                 return;
             }
             if (args.Contains("freeze"))
-                lock (conn.Monsters)
-                {
-                    double now = conn.Clock.Elapsed.TotalSeconds, before = conn.ElementalAilments.ActionFactor(now);
-                    var stats = CharacterPlayerStats(conn);
-                    conn.ElementalAilments.Inflict(PlayerElementalAilments.Kind.Freeze, 100, 1, now,
-                        name => Stats.Key(name) is uint key ? stats.GetValueOrDefault(key) : 0, conn.IncomingHitRandom);
-                    PlayerAilmentsChangedLocked(conn, before, now);
-                }
+            {
+                double now = player.Clock.Elapsed.TotalSeconds, before = player.ElementalAilments.ActionFactor(now);
+                var stats = CharacterPlayerStats(player);
+                player.ElementalAilments.Inflict(PlayerElementalAilments.Kind.Freeze, 100, 1, now,
+                    key => stats.GetValueOrDefault(key), player.IncomingHitRandom);
+                PlayerAilmentsChangedLocked(player, before, now);
+            }
             int dealt = hit.Damage; string mitigation = hit.Mitigation; uint life = hit.Life;
-            await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+            await SendPlayerEnergyShield(player);
             if (life == 0)
-                await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.HideMiniLifeBar, 1)]),
-                    "0x01b3 player hide_mini_life_bar = 1 (dev hit)");
-            await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(PlayerId, life, conn.PlayerReservedLife),
-                $"0x01b1 player dev {type} hit for {dealt} ({amount} before {mitigation}), life {life}/{conn.PlayerMaxLife}");
+            {
+                SetStats(player, player.Id, [(Stat.HideMiniLifeBar, 1)]);
+                Note("0x01b3 player hide_mini_life_bar = 1 (dev hit)");
+            }
+            Note($"0x01b1 player dev {type} hit for {dealt} ({amount} before {mitigation}), life {life}/{player.PlayerMaxLife}");
             if (hit.Mana != hit.ManaBefore)
-                await SendPlayerMana(remote, stream, ciphers, conn, $"0x01b1 player mana {hit.Mana} ({(long)hit.Mana - hit.ManaBefore:+0;-0})");
+                await SendPlayerMana(player, $"0x01b1 player mana {hit.Mana} ({(long)hit.Mana - hit.ManaBefore:+0;-0})");
             if (life == 0)
-                await PlayerDied(remote, stream, ciphers, conn, $"0x0055 death screen ({conn.League ?? "?"} league, dev hit)");
-            await conn.Commands!.Reply($"{type}: {amount} → {dealt} after {mitigation}; life {life}/{conn.PlayerMaxLife}" +
+                await PlayerDied(player, $"0x0055 death screen ({player.Character.League ?? "?"} league, dev hit)");
+            await player.Commands!.Reply($"{type}: {amount} → {dealt} after {mitigation}; life {life}/{player.PlayerMaxLife}" +
                 $"{(hit.Mana != hit.ManaBefore ? $", mana {hit.Mana} ({(long)hit.Mana - hit.ManaBefore:+0;-0})" : "")}.");
         })
         .Add("suppression", "/suppression (Spell Suppression chance, roll and damage reduction)", async _ =>
         {
-            var (chance, effect, lucky, unlucky) = Suppression(conn);
+            var (chance, effect, lucky, unlucky) = Suppression(player);
             double effective = DamageModel.EffectiveSuppressionChance(chance, lucky, unlucky);
-            await conn.Commands!.Reply($"Spell Suppression: {chance}% chance (cap {DamageModel.SpellSuppressionChanceCap}%, effective {effective:0.#}%" +
+            await player.Commands!.Reply($"Spell Suppression: {chance}% chance (cap {DamageModel.SpellSuppressionChanceCap}%, effective {effective:0.#}%" +
                 $"{(lucky ? ", lucky" : "")}{(unlucky ? ", unlucky" : "")}), {effect}% less damage on a suppressed spell hit.");
         })
         .Add("suppression_luck", "/suppression_luck <lucky|unlucky|off> (dev: force a lucky/unlucky suppression roll)", async args =>
@@ -1237,18 +1157,15 @@ static class GmCommands
             string mode = args.Length == 0 ? "" : args[0].ToLowerInvariant();
             bool lucky = mode == "lucky", unlucky = mode == "unlucky";
             if (mode is not ("lucky" or "unlucky" or "off" or "")) throw new ArgumentException("lucky, unlucky or off");
-            lock (conn.Monsters)
-            {
-                conn.ForceSpellSuppressionLucky = lucky;
-                conn.ForceSpellSuppressionUnlucky = unlucky;
-                conn.Pools = PoolsFor(conn, conn.Pools.Level);
-            }
-            await SendCharacterStats(remote, stream, ciphers, conn, $"suppression luck {mode}");
-            await conn.Commands!.Reply($"Spell Suppression roll: {(lucky ? "lucky" : unlucky ? "unlucky" : "normal")}.");
+            player.ForceSpellSuppressionLucky = lucky;
+            player.ForceSpellSuppressionUnlucky = unlucky;
+            player.Pools = PoolsFor(player, player.Pools.Level);
+            await SendCharacterStats(player, PlayerStatChange.Sources);
+            await player.Commands!.Reply($"Spell Suppression roll: {(lucky ? "lucky" : unlucky ? "unlucky" : "normal")}.");
         })
         .Add("accuracy", "/accuracy [monster level] (accuracy rating and attack hit chance; default: your level)", async args =>
         {
-            int level = conn.Pools.Level;
+            int level = player.Pools.Level;
             if (args.Length > 0)
             {
                 if (!int.TryParse(args[0], out int requested) || requested < 1 || requested > Progression.MaxLevel)
@@ -1257,19 +1174,19 @@ static class GmCommands
             }
             int evasion = Monsters.BaseEvasion(level) ?? 0;
             int evasiveEvasion = Monsters.BaseEvasiveEvasion(level) ?? 0;
-            int chance = DamageModel.AccuracyHitChance(evasion, conn.Pools.Accuracy);
-            int evasiveChance = DamageModel.AccuracyHitChance(evasiveEvasion, conn.Pools.Accuracy);
-            var withMastery = conn.Pools.AccuracyMoreVsUniquePct != 0 || conn.Pools.AccuracyMoreInCloseRangePct != 0
-                ? $" Targets gain {conn.Pools.AccuracyMoreVsUniquePct:0.#}% more accuracy against unique enemies and " +
-                  $"{conn.Pools.AccuracyMoreInCloseRangePct:0.#}% more within the 20-unit close range, applied per attack roll."
+            int chance = DamageModel.AccuracyHitChance(evasion, player.Pools.Accuracy);
+            int evasiveChance = DamageModel.AccuracyHitChance(evasiveEvasion, player.Pools.Accuracy);
+            var withMastery = player.Pools.AccuracyMoreVsUniquePct != 0 || player.Pools.AccuracyMoreInCloseRangePct != 0
+                ? $" Targets gain {player.Pools.AccuracyMoreVsUniquePct:0.#}% more accuracy against unique enemies and " +
+                  $"{player.Pools.AccuracyMoreInCloseRangePct:0.#}% more within the 20-unit close range, applied per attack roll."
                 : "";
-            await conn.Commands!.Reply($"Accuracy {conn.Pools.Accuracy} ({conn.Pools.AccuracyPct}% increased): " +
+            await player.Commands!.Reply($"Accuracy {player.Pools.Accuracy} ({player.Pools.AccuracyPct}% increased): " +
                 $"{chance}% chance to hit a level {level} monster (evasion {evasion}), " +
                 $"{evasiveChance}% against evasive monsters (evasion {evasiveEvasion}). Spells always hit." + withMastery);
         })
         .Add("defences", "/defences [monster level] (armour, evasion and avoidance; default: your level)", async args =>
         {
-            int level = conn.Pools.Level;
+            int level = player.Pools.Level;
             if (args.Length > 0)
             {
                 if (!int.TryParse(args[0], out int requested) || requested < 1 || requested > Progression.MaxLevel)
@@ -1278,12 +1195,12 @@ static class GmCommands
             }
             int monsterAccuracy = Monsters.BaseAccuracy(level) ?? 0;
             int monsterDamage = Monsters.BaseDamage(level) ?? 0;
-            int evasion = PlayerEvasion(conn, conn.Clock.Elapsed.TotalSeconds);
+            int evasion = PlayerEvasion(player, player.Clock.Elapsed.TotalSeconds);
             int hitChance = DamageModel.AccuracyHitChance(evasion, monsterAccuracy);
-            int reduction = DamageModel.ArmourReduction(conn.Pools.Armour, monsterDamage);
-            await conn.Commands!.Reply($"Armour {conn.Pools.Armour} ({conn.Pools.ArmourPct}% increased): " +
+            int reduction = DamageModel.ArmourReduction(player.Pools.Armour, monsterDamage);
+            await player.Commands!.Reply($"Armour {player.Pools.Armour} ({player.Pools.ArmourPct}% increased): " +
                 $"{reduction}% physical reduction against a level {level} monster hit ({monsterDamage}), " +
-                $"evasion {evasion} ({conn.Pools.EvasionPct}% increased): {100 - hitChance}% chance to evade " +
+                $"evasion {evasion} ({player.Pools.EvasionPct}% increased): {100 - hitChance}% chance to evade " +
                 $"(monster accuracy {monsterAccuracy}, {hitChance}% chance to be hit).");
         })
         .Add("auras", "/auras [off <name|effectId|all>] (list reservations or disable one, including stances)", async args =>
@@ -1292,68 +1209,61 @@ static class GmCommands
             {
                 if (args.Length < 2 || !args[0].Equals("off", StringComparison.OrdinalIgnoreCase))
                     throw new ArgumentException("/auras off <name|effectId|all>");
-                await DisableReservations(remote, stream, ciphers, conn, string.Join(' ', args.Skip(1)));
+                await DisableReservations(player, string.Join(' ', args.Skip(1)));
             }
-            List<AuraCatalog.Aura> auras;
-            int reserved;
-            int maxMana;
-            int efficiency;
-            int auraEffect;
-            lock (conn.Monsters)
-            {
-                auras = [.. conn.Auras.Values];
-                reserved = ReservedMana(conn);
-                maxMana = (int)conn.Pools.Mana;
-                efficiency = conn.Pools.ManaReservationEfficiencyPct;
-                auraEffect = conn.Pools.AuraEffectPct;
-            }
+            List<AuraCatalog.Aura> auras = [.. player.Auras.Values];
+            int reserved = ReservedMana(player);
+            int maxMana = (int)player.Pools.Mana;
+            int efficiency = player.Pools.ManaReservationEfficiencyPct;
+            int auraEffect = player.Pools.AuraEffectPct;
             string list = auras.Count == 0 ? "none" : string.Join(", ", auras.Select(a =>
                 $"{a.Name} ({a.ManaFlat} flat, {a.ManaPercent / 100.0:0.##}% {(a.ReservesLife ? "life" : "mana")})"));
-            await conn.Commands!.Reply($"Auras: {list}. Mana {conn.PlayerMana}/{maxMana}, {reserved} reserved " +
-                $"({maxMana - reserved} unreserved); Life {conn.PlayerLife}/{conn.PlayerMaxLife}, {conn.PlayerReservedLife} reserved. " +
-                $"Reservation efficiency mana {efficiency}%, life {conn.Pools.LifeReservationEfficiencyPct}%, aura effect {auraEffect}%.");
+            await player.Commands!.Reply($"Auras: {list}. Mana {player.PlayerMana}/{maxMana}, {reserved} reserved " +
+                $"({maxMana - reserved} unreserved); Life {player.PlayerLife}/{player.PlayerMaxLife}, {player.PlayerReservedLife} reserved. " +
+                $"Reservation efficiency mana {efficiency}%, life {player.Pools.LifeReservationEfficiencyPct}%, aura effect {auraEffect}%.");
         })
         .Add("spellhit", "/spellhit <fire|cold|lightning|chaos|physical> <damage> (dev: spell hit through resistance and Spell Suppression)", async args =>
         {
             if (args.Length < 2) throw new ArgumentException("a damage type and an amount");
             if (ParseDamageType(args[0]) is not { } type) throw new ArgumentException("fire, cold, lightning, chaos or physical");
             if (!int.TryParse(args[1], out int amount) || amount <= 0) throw new ArgumentException("a positive amount");
-            if (!TrySyntheticEnemyHit(conn, type, amount, false, true, true, out var hit))
+            if (!TrySyntheticEnemyHit(player, type, amount, false, true, true, out var hit))
             {
-                await conn.Commands!.Reply(conn.PlayerLife == 0 ? "You are already dead." : "Enemy test hit rejected while paused or leaving.");
+                await player.Commands!.Reply(player.PlayerLife == 0 ? "You are already dead." : "Enemy test hit rejected while paused or leaving.");
                 return;
             }
             int dealt = hit.Damage; string mitigation = hit.Mitigation; uint life = hit.Life;
             bool suppressed = hit.Suppressed;
             var (chance, effect, lucky, unlucky) = hit.Suppression;
-            await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+            await SendPlayerEnergyShield(player);
             if (life == 0)
-                await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.HideMiniLifeBar, 1)]),
-                    "0x01b3 player hide_mini_life_bar = 1 (dev spell hit)");
-            await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(PlayerId, life, conn.PlayerReservedLife),
-                $"0x01b1 player dev spell {type} hit for {dealt} ({amount} before {mitigation}, suppression {(suppressed ? "yes" : "no")}), life {life}/{conn.PlayerMaxLife}");
+            {
+                SetStats(player, player.Id, [(Stat.HideMiniLifeBar, 1)]);
+                Note("0x01b3 player hide_mini_life_bar = 1 (dev spell hit)");
+            }
+            Note($"0x01b1 player dev spell {type} hit for {dealt} ({amount} before {mitigation}, suppression {(suppressed ? "yes" : "no")}), life {life}/{player.PlayerMaxLife}");
             if (hit.Mana != hit.ManaBefore)
-                await SendPlayerMana(remote, stream, ciphers, conn, $"0x01b1 player mana {hit.Mana} ({(long)hit.Mana - hit.ManaBefore:+0;-0})");
+                await SendPlayerMana(player, $"0x01b1 player mana {hit.Mana} ({(long)hit.Mana - hit.ManaBefore:+0;-0})");
             if (life == 0)
-                await PlayerDied(remote, stream, ciphers, conn, $"0x0055 death screen ({conn.League ?? "?"} league, dev spell hit)");
+                await PlayerDied(player, $"0x0055 death screen ({player.Character.League ?? "?"} league, dev spell hit)");
             double effective = DamageModel.EffectiveSuppressionChance(chance, lucky, unlucky);
-            await conn.Commands!.Reply($"{type} spell hit: {amount} → {dealt} after {mitigation}; " +
+            await player.Commands!.Reply($"{type} spell hit: {amount} → {dealt} after {mitigation}; " +
                 $"suppression {(suppressed ? "rolled" : "not rolled")} ({chance}% chance, effective {effective:0.#}%" +
-                $"{(lucky ? ", lucky" : "")}{(unlucky ? ", unlucky" : "")}); life {life}/{conn.PlayerMaxLife}.");
+                $"{(lucky ? ", lucky" : "")}{(unlucky ? ", unlucky" : "")}); life {life}/{player.PlayerMaxLife}.");
         })
-        .Add("charges", ChargesUsage, args => ChargesCommand(conn, args))
+        .Add("charges", ChargesUsage, args => ChargesCommand(player, args))
         .Add("crit", "/crit (attack and spell critical strike chance and multiplier)", async _ =>
         {
-            var p = conn.Pools;
-            await conn.Commands!.Reply(
+            var p = player.Pools;
+            await player.Commands!.Reply(
                 $"Attack crit {p.AttackCriticalStrikeChance / 100.0:0.##}% ({p.CriticalStrikeChancePct}% increased), " +
-                $"multiplier {AttackCriticalMultiplier(conn, CharacterPlayerStats(conn))}%. Spell crit reference (5% base) {p.SpellCriticalStrikeChance / 100.0:0.##}% " +
+                $"multiplier {AttackCriticalMultiplier(player, CharacterPlayerStats(player))}%. Spell crit reference (5% base) {p.SpellCriticalStrikeChance / 100.0:0.##}% " +
                 $"({p.SpellCriticalStrikeChancePct}% increased), multiplier {p.SpellCriticalStrikeMultiplier}%.");
         })
         .Add("block", "/block (attack and spell block chance and caps)", async _ =>
         {
-            var p = conn.Pools;
-            await conn.Commands!.Reply($"Block {p.BlockChance}% (max {p.BlockChanceMax}%, uncapped {p.BlockChanceUncapped}%, effective {DamageModel.EffectiveBlockChance(p.BlockChance, p.AttackBlockLucky, p.AttackBlockUnlucky):0.#}%), " +
+            var p = player.Pools;
+            await player.Commands!.Reply($"Block {p.BlockChance}% (max {p.BlockChanceMax}%, uncapped {p.BlockChanceUncapped}%, effective {DamageModel.EffectiveBlockChance(p.BlockChance, p.AttackBlockLucky, p.AttackBlockUnlucky):0.#}%), " +
                 $"spell block {p.SpellBlockChance}% (max {p.SpellBlockChanceMax}%, uncapped {p.SpellBlockChanceUncapped}%, effective {DamageModel.EffectiveBlockChance(p.SpellBlockChance, p.SpellBlockLucky, p.SpellBlockUnlucky):0.#}%)" +
                 $"{(p.AttackBlockLucky ? "; attack lucky" : "")}{(p.SpellBlockLucky ? "; spell lucky" : "")}{(p.AttackBlockUnlucky ? "; attack unlucky" : "")}{(p.SpellBlockUnlucky ? "; spell unlucky" : "")}.");
         })
@@ -1362,14 +1272,11 @@ static class GmCommands
             string mode = args.Length == 0 ? "" : args[0].ToLowerInvariant();
             bool attack = mode is "attack" or "both", spell = mode is "spell" or "both";
             if (mode is not ("attack" or "spell" or "both" or "off" or "")) throw new ArgumentException("attack, spell, both or off");
-            lock (conn.Monsters)
-            {
-                conn.ForceAttackBlockLucky = attack;
-                conn.ForceSpellBlockLucky = spell;
-                conn.Pools = PoolsFor(conn, conn.Pools.Level);
-            }
-            await SendCharacterStats(remote, stream, ciphers, conn, $"lucky block {mode}");
-            await conn.Commands!.Reply($"Lucky block: attack {(attack ? "on" : "off")}, spell {(spell ? "on" : "off")}.");
+            player.ForceAttackBlockLucky = attack;
+            player.ForceSpellBlockLucky = spell;
+            player.Pools = PoolsFor(player, player.Pools.Level);
+            await SendCharacterStats(player, PlayerStatChange.Sources);
+            await player.Commands!.Reply($"Lucky block: attack {(attack ? "on" : "off")}, spell {(spell ? "on" : "off")}.");
         })
         .Add("blockhit", "/blockhit <attack|spell> <fire|cold|lightning|chaos|physical> <damage> (dev: hit through block and resistance)", async args =>
         {
@@ -1378,66 +1285,57 @@ static class GmCommands
             if (!spell && !args[0].Equals("attack", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("attack or spell");
             if (ParseDamageType(args[1]) is not { } type) throw new ArgumentException("fire, cold, lightning, chaos or physical");
             if (!int.TryParse(args[2], out int amount) || amount <= 0) throw new ArgumentException("a positive amount");
-            if (!TrySyntheticEnemyHit(conn, type, amount, true, spell, false, out var hit))
+            if (!TrySyntheticEnemyHit(player, type, amount, true, spell, false, out var hit))
             {
-                await conn.Commands!.Reply(conn.PlayerLife == 0 ? "You are already dead." : "Enemy test hit rejected while paused or leaving.");
+                await player.Commands!.Reply(player.PlayerLife == 0 ? "You are already dead." : "Enemy test hit rejected while paused or leaving.");
                 return;
             }
             int dealt = hit.Damage; string mitigation = hit.Mitigation; uint life = hit.Life;
             uint mana = hit.Mana, manaBefore = hit.ManaBefore;
             bool blocked = hit.Blocked; int chance = hit.BlockChance;
-            await SendPlayerEnergyShield(remote, stream, ciphers, conn);
+            await SendPlayerEnergyShield(player);
             if (life == 0)
-                await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.HideMiniLifeBar, 1)]),
-                    "0x01b3 player hide_mini_life_bar = 1 (dev block hit)");
-            await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(PlayerId, life, conn.PlayerReservedLife),
-                $"0x01b1 player dev {(spell ? "spell" : "attack")} hit for {dealt} ({(blocked ? "blocked" : mitigation)}), life {life}/{conn.PlayerMaxLife}");
+            {
+                SetStats(player, player.Id, [(Stat.HideMiniLifeBar, 1)]);
+                Note("0x01b3 player hide_mini_life_bar = 1 (dev block hit)");
+            }
+            Note($"0x01b1 player dev {(spell ? "spell" : "attack")} hit for {dealt} ({(blocked ? "blocked" : mitigation)}), life {life}/{player.PlayerMaxLife}");
             if (mana != manaBefore)
-                await SendPlayerMana(remote, stream, ciphers, conn,
+                await SendPlayerMana(player,
                     $"0x01b1 player mana {mana} ({(long)mana - manaBefore:+0;-0}{(blocked ? ", blocked" : "")})");
             if (life == 0)
-                await PlayerDied(remote, stream, ciphers, conn, $"0x0055 death screen ({conn.League ?? "?"} league, dev block hit)");
-            await conn.Commands!.Reply($"{(spell ? "Spell" : "Attack")} hit: {amount} → {dealt}; {(blocked ? "blocked" : "not blocked")} ({chance}% chance); life {life}/{conn.PlayerMaxLife}.");
+                await PlayerDied(player, $"0x0055 death screen ({player.Character.League ?? "?"} league, dev block hit)");
+            await player.Commands!.Reply($"{(spell ? "Spell" : "Attack")} hit: {amount} → {dealt}; {(blocked ? "blocked" : "not blocked")} ({chance}% chance); life {life}/{player.PlayerMaxLife}.");
         })
         .Add("god", "/god [on | off | immune] (toggles, or on/off: 1000% increased attack and cast speed, 100% of life and 10 000 mana regenerated per second, 200% increased area of effect, +10 000 life, +1000 attributes; immune: also no damage taken; kept across area changes)",
-            args => GodCommand(remote, stream, ciphers, conn, args))
-        .Add("set_aoe", "/set_aoe <percent> | off (dev: the character's increased area of effect, base_skill_area_of_effect_+%, in place of what passives, items and /god give)", async args =>
+            args => GodCommand(player, args))
+        .Add("set_aoe", "/set_aoe <percent> | off (adds to the character's increased area of effect, base_skill_area_of_effect_+%, while in this area)", async args =>
         {
             if (args.Length == 0) throw new ArgumentException("percent or off");
-            if (Stats.Key("base_skill_area_of_effect_+%") is not uint stat) throw new ArgumentException("no area of effect stat in the data");
-            bool off = args[0].Equals("off", StringComparison.OrdinalIgnoreCase);
-            int value = off ? 0 : int.Parse(args[0]);
-            // The Righteous Fire burning now, before this command's own sends: the relight below is for that one only.
-            RighteousFireState? burning;
-            lock (conn.Monsters) { if (off) conn.PlayerStats.Remove(stat); else conn.PlayerStats[stat] = value; burning = conn.RighteousFire; }
-            await SendPlayerStatSnapshot(remote, stream, ciphers, conn,
-            () => PlayerStatsUpdateAtGate(conn, PlayerStatsWithCleared(conn)),
-                $"0x01b3 stats: base_skill_area_of_effect_+% = {(off ? "the character's own" : value)}");
-            await SendSkills(remote, stream, ciphers, conn);
-            bool relit = await RelightRighteousFire(remote, stream, ciphers, conn, "/set_aoe", burning);
-            await conn.Commands!.Reply((off ? "Increased area of effect: the character's own" : $"Increased area of effect: {value}%")
-                + (relit ? ", Righteous Fire relit" : ""));
+            int? value = args[0].Equals("off", StringComparison.OrdinalIgnoreCase) ? null : int.Parse(args[0]);
+            SetBuffStat(player, AoeBuff, Stat.BaseSkillAreaOfEffectPlusPct, value);
+            await player.Commands!.Reply(value is int v ? $"Increased area of effect {v:+0;-0}% in this area." : "Increased area of effect: the character's own.");
         })
         .Add("heal", "/heal (full life; also revives: 0x1b1 from 0 runs the client's revive)", async _ =>
         {
-            lock (conn.Monsters) { (conn.PlayerLife, conn.PlayerMana) = (conn.PlayerUnreservedLife, (uint)UnreservedMana(conn)); conn.EnergyShield.SetMaximum(conn.Pools.EnergyShield, true); }
-            await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife, conn.PlayerReservedLife),
-                $"0x01b1 player healed to {conn.PlayerMaxLife}");
-            await SendPlayerMana(remote, stream, ciphers, conn, $"0x01b1 player mana {conn.PlayerMana}");
-            await Send(remote, stream, ciphers, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.HideMiniLifeBar, 0)]),
-                "0x01b3 player hide_mini_life_bar = 0");
+            (player.PlayerLife, player.PlayerMana) = (player.PlayerUnreservedLife, (uint)UnreservedMana(player));
+            player.EnergyShield.SetMaximum(player.Pools.EnergyShield, true);
+            Note($"0x01b1 player healed to {player.PlayerMaxLife}");
+            await SendPlayerMana(player, $"0x01b1 player mana {player.PlayerMana}");
+            SetStats(player, player.Id, [(Stat.HideMiniLifeBar, 0)]);
+            Note("0x01b3 player hide_mini_life_bar = 0");
         })
         .Add("death_screen", "/death_screen [hex flags] (show the death screen; default: this league's; 2 hides it)", async args =>
         {
-            byte flags = args.Length > 0 ? Convert.ToByte(args[0].Replace("0x", ""), 16) : DeathScreenFlags(conn);
-            await Send(remote, stream, ciphers, InstanceProtocol.DeathScreen(flags), $"0x0055 death screen flags 0x{flags:x2}");
+            byte flags = args.Length > 0 ? Convert.ToByte(args[0].Replace("0x", ""), 16) : DeathScreenFlags(player);
+            await Send(player, InstanceProtocol.DeathScreen(flags), $"0x0055 death screen flags 0x{flags:x2}");
         })
         .Add("transition", "/transition [pos [here | x y | +dx +dy] | rot <degrees> | z <z | none> | model <path | none> | index <n>] " +
             "(dev: show or change the first area transition; it is re-created)", async args =>
         {
-            var (px, py) = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-            if (conn.Layout.AreaTransitions.Length == 0) { await conn.Commands!.Reply("This area has no area transition."); return; }
-            var (id, at) = conn.Layout.AreaTransitions[0];
+            var (px, py) = player.Walk.Position(player.Clock.Elapsed.TotalSeconds);
+            if (player.Layout.AreaTransitions.Length == 0) { await player.Commands!.Reply("This area has no area transition."); return; }
+            var (id, at) = player.Layout.AreaTransitions[0];
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             string? what = args.Length > 0 ? args[0] : null;
             string[] rest = args.Skip(1).ToArray();
@@ -1455,22 +1353,22 @@ static class GmCommands
             };
             if (changed is not null)
             {
-                conn.ReplaceAreaTransition(id, changed);
+                player.ReplaceAreaTransition(id, changed);
                 at = changed;
-                await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), $"0x02bd remove area transition 0x{id:x}");
-                await Send(remote, stream, ciphers, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(at.Type), at.Blob()),
+                await Send(player, InstanceProtocol.RemoveObject(id), $"0x02bd remove area transition 0x{id:x}");
+                await Send(player, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(at.Type), at.Blob()),
                     $"0x02bb create area transition {at}");
-                await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(id), $"0x01a9 area transition 0x{id:x} enters wake zone");
+                await Send(player, InstanceProtocol.EnterWakeZone(id), $"0x01a9 area transition 0x{id:x} enters wake zone");
             }
-            await conn.Commands!.Reply($"Area transition 0x{id:x} at ({at.GridX}, {at.GridY}), {at.Rotation * 180 / MathF.PI:0.#} degrees, " +
+            await player.Commands!.Reply($"Area transition 0x{id:x} at ({at.GridX}, {at.GridY}), {at.Rotation * 180 / MathF.PI:0.#} degrees, " +
                 $"height {at.Height?.ToString(inv) ?? "terrain"}, model {at.Model ?? "none"}; you at ({px}, {py}).");
         })
         .Add("quest_flag", "/quest_flag [<QuestFlags Id> [off]] (dev: list, set or clear quest flags, e.g. /quest_flag a1q1-KilledHillock)", async args =>
         {
-            if (args.Length < 1) { await conn.Commands!.Reply(string.Join(", ", conn.QuestFlags.DefaultIfEmpty("no quest flags"))); return; }
+            if (args.Length < 1) { await player.Commands!.Reply(string.Join(", ", player.Character.QuestFlags.DefaultIfEmpty("no quest flags"))); return; }
             bool off = args.Length > 1 && args[1].Equals("off", StringComparison.OrdinalIgnoreCase);
-            await SetQuestFlags(remote, stream, ciphers, conn, [args[0]], on: !off);
-            await conn.Commands!.Reply($"{args[0]} {(off ? "cleared" : "set")}");
+            await SetQuestFlags(player, [args[0]], on: !off);
+            await player.Commands!.Reply($"{args[0]} {(off ? "cleared" : "set")}");
         }, "quest_flag")
         .Add("trials", "/trials [on|off] [1|2|3|4] (dev: set or clear the Trials of Ascendancy's quest flags and league quest flags, saved, of one Labyrinth tier (1 Normal's six, 2 Cruel's three, 3 Merciless's three, 4 Eternal's six) or of all, then open the Trial Plaque window with the trials done)", async args =>
         {
@@ -1481,43 +1379,43 @@ static class GmCommands
             if (change)
             {
                 bool on = args[0].Equals("on", StringComparison.OrdinalIgnoreCase);
-                await SetQuestFlags(remote, stream, ciphers, conn, [.. trials.Select(t => t.Flag)], on);
-                await SetLeagueQuestFlags(remote, stream, ciphers, conn, [.. trials.Select(t => t.LeagueFlag)], on);
+                await SetQuestFlags(player, [.. trials.Select(t => t.Flag)], on);
+                await SetLeagueQuestFlags(player, [.. trials.Select(t => t.LeagueFlag)], on);
                 // Without the Normal trials the Sarn Encampment's statue closes again (its plaque opens it).
                 if (!on && tier is 0 or 1)
-                    await SetQuestFlags(remote, stream, ciphers, conn, [LabyrinthTrials.SarnStatueOpened, LabyrinthTrials.LabyrinthAccess], false);
-                await conn.Commands!.Reply($"{trials.Count} trial(s) of {which} {(on ? "done" : "cleared")}: their quest flags and league quest flags.");
+                    await SetQuestFlags(player, [LabyrinthTrials.SarnStatueOpened, LabyrinthTrials.LabyrinthAccess], false);
+                await player.Commands!.Reply($"{trials.Count} trial(s) of {which} {(on ? "done" : "cleared")}: their quest flags and league quest flags.");
             }
-            int own = trials.Count(t => conn.HasQuestFlag(t.Flag)), league = trials.Count(t => conn.LeagueQuestFlags.Contains(t.LeagueFlag));
-            await conn.Commands!.Reply($"Trials done ({which}): {own} of {trials.Count} by the character's quest flag, {league} by the league's.");
-            await Send(remote, stream, ciphers, InstanceWaypoints.OpenUi(InstanceWaypoints.TrialPlaqueUi), "0x007b open the Trial Plaque window (/trials)");
+            int own = trials.Count(t => player.Character.HasQuestFlag(t.Flag)), league = trials.Count(t => player.Character.LeagueQuestFlags.Contains(t.LeagueFlag));
+            await player.Commands!.Reply($"Trials done ({which}): {own} of {trials.Count} by the character's quest flag, {league} by the league's.");
+            await Send(player, InstanceWaypoints.OpenUi(InstanceWaypoints.TrialPlaqueUi), "0x007b open the Trial Plaque window (/trials)");
         })
         .Add("lab_layout", "/lab_layout [1|2|3|4] [yyyy-mm-dd] (dev: today's Labyrinth layout of a tier, or another day's, 1 Normal by default: each room's area, section, connections and secrets; /goto a listed area to play today's room with its node)", async args =>
         {
             int tier = args.Length > 0 && int.TryParse(args[0], out int n) && n is >= 1 and <= 4 ? n : 1;
             string? date = args.FirstOrDefault(a => a.Contains('-'));
             uint seed = date is null ? LabyrinthDay.Seed : LabyrinthDay.SeedOf(DateOnly.ParseExact(date, "yyyy-MM-dd"));
-            await conn.Commands!.Reply($"Labyrinth day {seed}, tier {tier}:");
-            foreach (var line in LabyrinthDay.Describe(seed, tier)) await conn.Commands!.Reply(line);
+            await player.Commands!.Reply($"Labyrinth day {seed}, tier {tier}:");
+            foreach (var line in LabyrinthDay.Describe(seed, tier)) await player.Commands!.Reply(line);
         })
         .Add("trial_spike_hit", "/trial_spike_hit [<from ms> <to ms>] (dev: how long after firing the Trials of Ascendancy spike traps hit, up to 3000 ms, e.g. /trial_spike_hit 1000 1250)", async args =>
         {
             if (args.Length >= 2 && int.TryParse(args[0], out int from) && int.TryParse(args[1], out int to) && from >= 0 && to > from && to <= 3000)
                 LabyrinthTrials.SpikeHitWindow = (from / 1000.0, to / 1000.0);
             var (f, t) = LabyrinthTrials.SpikeHitWindow;
-            await conn.Commands!.Reply($"Trial spike traps hit from {f * 1000:0} to {t * 1000:0} ms after firing.");
+            await player.Commands!.Reply($"Trial spike traps hit from {f * 1000:0} to {t * 1000:0} ms after firing.");
         })
         .Add("trial_spike_step", "/trial_spike_step [<ms>] (dev: the time between two spike traps of a Trials of Ascendancy ring's wave, from its next wave, e.g. /trial_spike_step 250)", async args =>
         {
             if (args.Length >= 1 && int.TryParse(args[0], out int ms) && ms is >= 50 and <= 3000)
                 LabyrinthTrials.SpikeStepSeconds = ms / 1000.0;
-            await conn.Commands!.Reply($"Trial spike rings step {LabyrinthTrials.SpikeStepSeconds * 1000:0} ms a trap.");
+            await player.Commands!.Reply($"Trial spike rings step {LabyrinthTrials.SpikeStepSeconds * 1000:0} ms a trap.");
         })
         .Add("trial_spike_anim", "/trial_spike_anim [<ms>] (dev: how long a Trials of Ascendancy spike trap's Emerge animation (0x1d1) is stretched over, e.g. /trial_spike_anim 2000)", async args =>
         {
             if (args.Length >= 1 && int.TryParse(args[0], out int ms) && ms is >= 100 and <= 6000)
                 LabyrinthTrials.SpikeAnimationSeconds = ms / 1000.0;
-            await conn.Commands!.Reply($"Trial spike traps rise over a {LabyrinthTrials.SpikeAnimationSeconds * 1000:0} ms Emerge animation.");
+            await player.Commands!.Reply($"Trial spike traps rise over a {LabyrinthTrials.SpikeAnimationSeconds * 1000:0} ms Emerge animation.");
         })
         .Add("trial_roomba_damage", "/trial_roomba_damage [<life %> <energy shield %> [<radius>]] (dev: what a Trials of Ascendancy roomba deals a second of maximum life and energy shield while the player is in it, and how near its centre that is in cells, e.g. /trial_roomba_damage 40 25 10)", async args =>
         {
@@ -1528,7 +1426,7 @@ static class GmCommands
             if (args.Length >= 3 && double.TryParse(args[2], System.Globalization.NumberStyles.Float, inv, out double radius) && radius is > 0 and <= 50)
                 LabyrinthTrials.RoombaRadius = radius;
             var (l, e) = LabyrinthTrials.RoombaDamagePerSecond;
-            await conn.Commands!.Reply($"Trial roombas deal {l * 100:0.#}% of maximum life and {e * 100:0.#}% of maximum energy shield a second within {LabyrinthTrials.RoombaRadius:0.#} cells.");
+            await player.Commands!.Reply($"Trial roombas deal {l * 100:0.#}% of maximum life and {e * 100:0.#}% of maximum energy shield a second within {LabyrinthTrials.RoombaRadius:0.#} cells.");
         })
         .Add("trial_saw_damage", "/trial_saw_damage [<life %> <energy shield %> [<radius>]] (dev: what a Trials of Ascendancy sawblade deals a second of maximum life and energy shield while the player is in it, and how near its centre that is in cells, e.g. /trial_saw_damage 40 50 5)", async args =>
         {
@@ -1539,13 +1437,13 @@ static class GmCommands
             if (args.Length >= 3 && double.TryParse(args[2], System.Globalization.NumberStyles.Float, inv, out double radius) && radius is > 0 and <= 50)
                 LabyrinthTrials.SawRadius = radius;
             var (l, e) = LabyrinthTrials.SawDamagePerSecond;
-            await conn.Commands!.Reply($"Trial sawblades deal {l * 100:0.#}% of maximum life and {e * 100:0.#}% of maximum energy shield a second within {LabyrinthTrials.SawRadius:0.#} cells.");
+            await player.Commands!.Reply($"Trial sawblades deal {l * 100:0.#}% of maximum life and {e * 100:0.#}% of maximum energy shield a second within {LabyrinthTrials.SawRadius:0.#} cells.");
         })
         .Add("trial_dart_poison", "/trial_dart_poison [<percent>] (dev: how much of a Trials of Ascendancy dart's hit, its life share, a poison stack deals a second, from the next hit, e.g. /trial_dart_poison 10)", async args =>
         {
             if (args.Length >= 1 && double.TryParse(args[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double pct) && pct is > 0 and <= 100)
                 LabyrinthTrials.ArrowPoisonPerSecond = pct / 100;
-            await conn.Commands!.Reply($"Trial dart poison: {LabyrinthTrials.ArrowPoisonPerSecond * 100:0.#}% of the hit's life share a second, per stack.");
+            await player.Commands!.Reply($"Trial dart poison: {LabyrinthTrials.ArrowPoisonPerSecond * 100:0.#}% of the hit's life share a second, per stack.");
         })
         .Add("trial_lava", "/trial_lava [<life %> <energy shield %> [<peak s> [<cold s>]]] (dev: what a Trials of Ascendancy hot plate deals a second of maximum life and energy shield, before fire resistance, while its lava lies on it, and how long it stays at its peak and rests cold between its 6 s heating and 7 s cooling, from its next cycle, e.g. /trial_lava 40 50 5 6)", async args =>
         {
@@ -1558,127 +1456,127 @@ static class GmCommands
             if (args.Length >= 4 && double.TryParse(args[3], System.Globalization.NumberStyles.Float, inv, out double rest) && rest is >= 0 and <= 60)
                 LabyrinthTrials.LavaRestSeconds = rest;
             var (l, e) = LabyrinthTrials.LavaDamagePerSecond;
-            await conn.Commands!.Reply($"Trial hot plates deal {l * 100:0.#}% of maximum life and {e * 100:0.#}% of maximum energy shield a second (before fire resistance), " +
+            await player.Commands!.Reply($"Trial hot plates deal {l * 100:0.#}% of maximum life and {e * 100:0.#}% of maximum energy shield a second (before fire resistance), " +
                 $"at the peak {LabyrinthTrials.LavaBurnSeconds:0.#} s, cold {LabyrinthTrials.LavaRestSeconds:0.#} s.");
         })
         .Add("atlas", "/atlas [layout] (dev: show or choose the fallback layout generic maps open)", async args =>
         {
-            var atlas = MapDevices.Value.Atlas;
-            if (atlas is null || atlas.Layouts.Count == 0) { await conn.Commands!.Reply("No Atlas layouts: extract AtlasNode.json and WorldAreas.json."); return; }
+            var atlas = MapDevices.Atlas;
+            if (atlas is null || atlas.Layouts.Count == 0) { await player.Commands!.Reply("No Atlas layouts: extract AtlasNode.json and WorldAreas.json."); return; }
             if (args.Length == 0)
             {
-                var current = atlas.Selected(CharacterName(conn));
-                await conn.Commands!.Reply($"Atlas layout: {current?.Name} ({current?.Id}); {atlas.Layouts.Count} layouts available.");
+                var current = atlas.Selected(CharacterName(player));
+                await player.Commands!.Reply($"Atlas layout: {current?.Name} ({current?.Id}); {atlas.Layouts.Count} layouts available.");
                 return;
             }
             string query = string.Join(' ', args);
-            if (atlas.Find(query) is not { } layout) { await conn.Commands!.Reply($"No Atlas layout \"{query}\"."); return; }
-            if (CharacterName(conn) is { } character)
+            if (atlas.Find(query) is not { } layout) { await player.Commands!.Reply($"No Atlas layout \"{query}\"."); return; }
+            if (CharacterName(player) is { } character)
             {
                 atlas.Select(character, layout);
                 CharacterSaves.SetAtlasLayout(character, layout.Id);
             }
-            await conn.Commands!.Reply($"Atlas layout set to {layout.Name} ({layout.Id}, tier {layout.Tier}).");
+            await player.Commands!.Reply($"Atlas layout set to {layout.Name} ({layout.Id}, tier {layout.Tier}).");
         })
         .Add("atlas_tree", "/atlas_tree (dev: open the Atlas passive tree; S→C 0x7b kind 0x11)", async _ =>
         {
-            await Send(remote, stream, ciphers, InstanceWaypoints.OpenUi(InstanceWaypoints.AtlasUi),
+            await Send(player, InstanceWaypoints.OpenUi(InstanceWaypoints.AtlasUi),
                 "0x007b open the Atlas passive tree");
         })
         .Add("atlas_points", "/atlas_points [<n>] (dev: show or set the Atlas passive point budget, saved)", async args =>
         {
             if (args.Length == 0)
             {
-                await conn.Commands!.Reply($"Atlas passive points: {conn.AtlasPassivePoints}; " +
-                    $"preset allocations: {string.Join(", ", conn.AtlasPassives.Select((p, i) => $"{i}={p.Count}"))}.");
+                await player.Commands!.Reply($"Atlas passive points: {player.Character.AtlasPassivePoints}; " +
+                    $"preset allocations: {string.Join(", ", player.Character.AtlasPassives.Select((p, i) => $"{i}={p.Count}"))}.");
                 return;
             }
             if (!int.TryParse(args[0], out int points) || points is < 0 or > ushort.MaxValue)
                 throw new ArgumentException("a number from 0 to 65535");
-            conn.AtlasPassivePoints = (ushort)points;
-            if (CharacterName(conn) is { } character)
-                CharacterSaves.SetAtlasPassives(character, conn.AtlasPassives, conn.AtlasPassivePoints);
-            await SendAtlasSlots(remote, stream, ciphers, conn, "/atlas_points");
-            await conn.Commands!.Reply($"Atlas passive points: {points}.");
+            player.Character.AtlasPassivePoints = (ushort)points;
+            if (CharacterName(player) is { } character)
+                CharacterSaves.SetAtlasPassives(character, player.Character.AtlasPassives, player.Character.AtlasPassivePoints);
+            await SendAtlasSlots(player, "/atlas_points");
+            await player.Commands!.Reply($"Atlas passive points: {points}.");
         })
         .Add("goto", "/goto <area id or name> [seed] (dev: change area as if through an area transition, e.g. /goto 1_1_3; with a seed, a new instance at that seed, e.g. /goto 1_1_5 1384217569)", async args =>
         {
             // A last number is the seed: a new instance at it, as the capture tour's stops (towns keep seed 1).
             uint seed = args.Length > 1 && uint.TryParse(args[^1], out var s) && s != 0 ? s : 0;
             string target = string.Join(' ', seed != 0 ? args[..^1] : args);
-            if (AreaTransitionCatalog.HashOf(target) is not { } hash) { await conn.Commands!.Reply($"Unknown area \"{target}\" (needs data/area-transitions.json)."); return; }
-            await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(hash, 0, seed != 0) { Seed = seed },
+            if (AreaTransitionCatalog.HashOf(target) is not { } hash) { await player.Commands!.Reply($"Unknown area \"{target}\" (needs data/area-transitions.json)."); return; }
+            await ChangeArea(player, new PendingTransfer(hash, 0, seed != 0) { Seed = seed },
                 seed != 0 ? $"/goto {target} seed {seed}" : $"/goto {target}");
         }, "area")
         .Add("tour", "/tour <list file> | stop | status (dev, live.ps1 -Walkmaps: visit every \"<area id> <seed>\" of the file in a new instance and record it; levelgen tourlist writes one)", async args =>
         {
-            string character = CharacterName(conn);
+            string character = CharacterName(player);
             string what = args.Length > 0 ? args[0] : "status";
-            if (what.Equals("stop", StringComparison.OrdinalIgnoreCase)) { await conn.Commands!.Reply(CaptureTour.Stop(character)); return; }
-            if (what.Equals("status", StringComparison.OrdinalIgnoreCase)) { await conn.Commands!.Reply(CaptureTour.Status(character)); return; }
+            if (what.Equals("stop", StringComparison.OrdinalIgnoreCase)) { await player.Commands!.Reply(CaptureTour.Stop(character)); return; }
+            if (what.Equals("status", StringComparison.OrdinalIgnoreCase)) { await player.Commands!.Reply(CaptureTour.Status(character)); return; }
             string path = string.Join(' ', args);
-            if (!AreaLayouts.Recording) { await conn.Commands!.Reply("A tour needs the walk-map recorder: start the servers with live.ps1 -Walkmaps."); return; }
-            if (!File.Exists(path)) { await conn.Commands!.Reply($"No file {path} (relative to the Gateway's directory, the repository root)."); return; }
-            await conn.Commands!.Reply(CaptureTour.Start(character, path));
+            if (!AreaLayouts.Recording) { await player.Commands!.Reply("A tour needs the walk-map recorder: start the servers with live.ps1 -Walkmaps."); return; }
+            if (!File.Exists(path)) { await player.Commands!.Reply($"No file {path} (relative to the Gateway's directory, the repository root)."); return; }
+            await player.Commands!.Reply(CaptureTour.Start(character, path));
             // Not awaited: a step waits for the client to arrive or to fail.
-            _ = ContinueTour(remote, stream, ciphers, conn, starting: true);
+            _ = ContinueTour(player, starting: true);
         })
         .Add("league_flag", "/league_flag [<id> [off]] (dev: list, set or clear league quest flags by the client's id, saved for the league, e.g. /league_flag 350)", async args =>
         {
             if (args.Length < 1 || !int.TryParse(args[0], out int flag))
             {
-                await Send(remote, stream, ciphers, InstanceChat.ChatLine($"League quest flags: {string.Join(", ", conn.LeagueQuestFlags.Order())}"), "0x0017 chat line: league quest flags");
+                await Send(player, InstanceChat.ChatLine($"League quest flags: {string.Join(", ", player.Character.LeagueQuestFlags.Order())}"), "0x0017 chat line: league quest flags");
                 return;
             }
             bool off = args.Length > 1 && args[1].Equals("off", StringComparison.OrdinalIgnoreCase);
-            await SetLeagueQuestFlags(remote, stream, ciphers, conn, [flag], on: !off);
-            await Send(remote, stream, ciphers, InstanceChat.ChatLine($"League quest flag {flag} {(off ? "cleared" : "set")}."), $"0x0017 chat line: league quest flag {flag}");
+            await SetLeagueQuestFlags(player, [flag], on: !off);
+            await Send(player, InstanceChat.ChatLine($"League quest flag {flag} {(off ? "cleared" : "set")}."), $"0x0017 chat line: league quest flag {flag}");
         })
         .Add("hideout_keys", "/hideout_keys <a> <b> (dev: the Player component's two Hideouts.dat keys, HASH16 hex or a hideout area id)", async args =>
         {
             ushort Key(string s) => HideoutCatalog.Hideouts.FirstOrDefault(h => h.AreaId.Equals(s, StringComparison.OrdinalIgnoreCase)) is { } h ? h.Hash16
                 : ushort.TryParse(s.Replace("0x", ""), System.Globalization.NumberStyles.HexNumber, null, out var k) ? k : (ushort)0;
             ushort a = args.Length > 0 ? Key(args[0]) : (ushort)0, b = args.Length > 1 ? Key(args[1]) : (ushort)0;
-            await Send(remote, stream, ciphers, InstanceEntities.PlayerHideoutsUpdate(PlayerId, a, b), $"0x02bc player hideout keys 0x{a:x4} 0x{b:x4}");
-            await Send(remote, stream, ciphers, InstanceChat.ChatLine($"Hideout keys 0x{a:x4} 0x{b:x4}."), "0x0017 chat line: hideout keys");
+            await Send(player, InstanceEntities.PlayerHideoutsUpdate(player.Id, a, b), $"0x02bc player hideout keys 0x{a:x4} 0x{b:x4}");
+            await Send(player, InstanceChat.ChatLine($"Hideout keys 0x{a:x4} 0x{b:x4}."), "0x0017 chat line: hideout keys");
         })
         .Add("waypoints", "/waypoints [all | reset] (list the activated waypoints; dev: activate all and visit every pinned area, or keep only the towns')", async args =>
         {
             var entries = WaypointCatalog.Areas.Entries;
-            if (entries.Count == 0) { await conn.Commands!.Reply("No waypoints (needs data/tables/WorldAreas.json)."); return; }
+            if (entries.Count == 0) { await player.Commands!.Reply("No waypoints (needs data/tables/WorldAreas.json)."); return; }
             string what = args.Length > 0 ? args[0].ToLowerInvariant() : "";
             if (what is "all" or "reset")
             {
                 string[] all;
                 string[] visited;
-                lock (conn.Waypoints)
+                lock (player.Character.Waypoints)
                 {
-                    conn.Waypoints.Clear();
-                    conn.Waypoints.UnionWith(entries.Where(e => what == "all" || e.IsTown).Select(e => e.Id));
-                    all = [.. conn.Waypoints];
+                    player.Character.Waypoints.Clear();
+                    player.Character.Waypoints.UnionWith(entries.Where(e => what == "all" || e.IsTown).Select(e => e.Id));
+                    all = [.. player.Character.Waypoints];
                     // "all" also visits every area with a World panel pin, so every pin and line shows.
-                    if (what == "all") conn.Visited.UnionWith(WaypointCatalog.Visits.PinnedAreas);
-                    else { conn.Visited.Clear(); conn.Visited.Add(conn.Layout.Id); }
-                    visited = [.. conn.Visited];
+                    if (what == "all") player.Character.Visited.UnionWith(WaypointCatalog.Visits.PinnedAreas);
+                    else { player.Character.Visited.Clear(); player.Character.Visited.Add(player.Layout.Id); }
+                    visited = [.. player.Character.Visited];
                 }
-                CharacterSaves.SetWaypoints(CharacterName(conn), all);
-                CharacterSaves.SetVisited(CharacterName(conn), visited);
-                await SendWaypointList(remote, stream, ciphers, conn, $"/waypoints {what}");
+                CharacterSaves.SetWaypoints(CharacterName(player), all);
+                CharacterSaves.SetVisited(CharacterName(player), visited);
+                await SendWaypointList(player, $"/waypoints {what}");
             }
             string list;
-            lock (conn.Waypoints) list = string.Join(", ", entries.Where(e => conn.Waypoints.Contains(e.Id)).Select(e => e.Name));
-            await conn.Commands!.Reply(list.Length == 0 ? "No activated waypoints." : $"Activated waypoints: {list}.");
+            lock (player.Character.Waypoints) list = string.Join(", ", entries.Where(e => player.Character.Waypoints.Contains(e.Id)).Select(e => e.Name));
+            await player.Commands!.Reply(list.Length == 0 ? "No activated waypoints." : $"Activated waypoints: {list}.");
         })
         .Add("npc", "/npc <NPCs row, Id or name> [rotation°] (spawns an NPC next to you)", async args =>
         {
             if (args.Length == 0) throw new ArgumentException("which NPC");
-            if (Npcs.Value.Error is { } error) { await conn.Commands!.Reply(error); return; }
+            if (Npcs.Error is { } error) { await player.Commands!.Reply(error); return; }
             float? deg = args.Length > 1 && float.TryParse(args[^1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float d) ? d : null;
             string query = string.Join(' ', deg is null ? args : args[..^1]);
-            if (Npcs.Value.Find(query) is not { } npc) { await conn.Commands!.Reply($"No NPC {query}."); return; }
-            if (!npc.Supported) { await conn.Commands!.Reply($"{npc} has components the server cannot write: {string.Join(", ", npc.Components ?? [])}."); return; }
-            var (x, y) = NextToPlayer(conn);
-            await SpawnNpc(remote, stream, ciphers, conn, npc, x, y, (deg ?? 0) * MathF.PI / 180);
+            if (Npcs.Find(query) is not { } npc) { await player.Commands!.Reply($"No NPC {query}."); return; }
+            if (!npc.Supported) { await player.Commands!.Reply($"{npc} has components the server cannot write: {string.Join(", ", npc.Components ?? [])}."); return; }
+            var (x, y) = NextToPlayer(player);
+            await SpawnNpc(player, npc, x, y, (deg ?? 0) * MathF.PI / 180);
         }, "npc")
         // Turns an NPC: it is created again with the new facing (0x2bd, then 0x2bb).
         .Add("npc_place", "/npc_place <name> <x> <y> <degrees> (dev: move and turn an NPC here)", async args =>
@@ -1687,13 +1585,13 @@ static class GmCommands
             float deg = float.Parse(args[^1], System.Globalization.CultureInfo.InvariantCulture);
             string name = string.Join(' ', args[..^3]);
             KeyValuePair<uint, SpawnedNpc> found;
-            lock (conn.Npcs) found = conn.Npcs.FirstOrDefault(n => n.Value.Npc.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
-            if (found.Value is not { } npc) { await conn.Commands!.Reply($"No NPC {name} here."); return; }
-            lock (conn.Npcs) conn.Npcs.Remove(found.Key);
-            conn.RemoveBlocker(found.Key);
-            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(found.Key), $"0x02bd remove npc 0x{found.Key:x} {npc.Npc.Name}");
-            await SpawnNpc(remote, stream, ciphers, conn, npc.Npc, x, y, deg * MathF.PI / 180);
-            await conn.Commands!.Reply($"{npc.Npc.Name} at ({x}, {y}), {deg}°");
+            lock (player.Npcs) found = player.Npcs.FirstOrDefault(n => n.Value.Npc.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+            if (found.Value is not { } npc) { await player.Commands!.Reply($"No NPC {name} here."); return; }
+            lock (player.Npcs) player.Npcs.Remove(found.Key);
+            player.RemoveBlocker(found.Key);
+            await Send(player, InstanceProtocol.RemoveObject(found.Key), $"0x02bd remove npc 0x{found.Key:x} {npc.Npc.Name}");
+            await SpawnNpc(player, npc.Npc, x, y, deg * MathF.PI / 180);
+            await player.Commands!.Reply($"{npc.Npc.Name} at ({x}, {y}), {deg}°");
         })
         .Add("npc_face", "/npc_face <name> <degrees> (turn an NPC here)", async args =>
         {
@@ -1701,14 +1599,14 @@ static class GmCommands
             float deg = float.Parse(args[^1], System.Globalization.CultureInfo.InvariantCulture);
             string name = string.Join(' ', args[..^1]);
             KeyValuePair<uint, SpawnedNpc> found;
-            lock (conn.Npcs) found = conn.Npcs.FirstOrDefault(n => n.Value.Npc.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
-            if (found.Value is not { } npc) { await conn.Commands!.Reply($"No NPC {name} here."); return; }
-            lock (conn.Npcs) conn.Npcs.Remove(found.Key);
-            conn.RemoveBlocker(found.Key);
-            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(found.Key), $"0x02bd remove npc 0x{found.Key:x} {npc.Npc.Name}");
+            lock (player.Npcs) found = player.Npcs.FirstOrDefault(n => n.Value.Npc.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+            if (found.Value is not { } npc) { await player.Commands!.Reply($"No NPC {name} here."); return; }
+            lock (player.Npcs) player.Npcs.Remove(found.Key);
+            player.RemoveBlocker(found.Key);
+            await Send(player, InstanceProtocol.RemoveObject(found.Key), $"0x02bd remove npc 0x{found.Key:x} {npc.Npc.Name}");
             float rad = deg * MathF.PI / 180;
-            await SpawnNpc(remote, stream, ciphers, conn, npc.Npc, npc.X, npc.Y, rad);
-            await conn.Commands!.Reply($"{npc.Npc.Name} at ({npc.X}, {npc.Y}) faces {deg}° ({rad:0.###} rad).");
+            await SpawnNpc(player, npc.Npc, npc.X, npc.Y, rad);
+            await player.Commands!.Reply($"{npc.Npc.Name} at ({npc.X}, {npc.Y}) faces {deg}° ({rad:0.###} rad).");
         })
         // Probe: S→C 0x7b (open a UI) with any kind and its four u32s (16-waypoints.md §3; kind 0 = World panel).
         .Add("ui", "/ui <kind hex> [a] [b] [c] [d] (S→C 0x7b open a UI)", async args =>
@@ -1716,77 +1614,65 @@ static class GmCommands
             if (args.Length == 0) throw new ArgumentException("which kind");
             byte kind = Convert.ToByte(args[0].Replace("0x", "", StringComparison.OrdinalIgnoreCase), 16);
             uint U(int i) => args.Length > i ? Convert.ToUInt32(args[i], args[i].StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? 16 : 10) : 0;
-            await Send(remote, stream, ciphers, InstanceWaypoints.OpenUi(kind, U(1), U(2), U(3), U(4)), $"0x007b open UI kind 0x{kind:x2} ({U(1)}, {U(2)}, {U(3)}, {U(4)})");
+            await Send(player, InstanceWaypoints.OpenUi(kind, U(1), U(2), U(3), U(4)), $"0x007b open UI kind 0x{kind:x2} ({U(1)}, {U(2)}, {U(3)}, {U(4)})");
         })
         .Add("npcs", "/npcs (list NPCs here)", async _ =>
         {
             string list;
-            lock (conn.Npcs) list = string.Join(", ", conn.Npcs.Select(n => $"0x{n.Key:x} {n.Value.Npc.Name} ({n.Value.X}, {n.Value.Y})"));
-            await conn.Commands!.Reply(list.Length == 0 ? "No NPCs." : list);
+            lock (player.Npcs) list = string.Join(", ", player.Npcs.Select(n => $"0x{n.Key:x} {n.Value.Npc.Name} ({n.Value.X}, {n.Value.Y})"));
+            await player.Commands!.Reply(list.Length == 0 ? "No NPCs." : list);
         })
         .Add("pos", "/pos (your cell)", async _ =>
         {
-            var (x, y) = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-            Console.WriteLine($"[gateway] {remote} /pos ({x}, {y}) in {conn.Layout.Id}");
-            await conn.Commands!.Reply($"({x}, {y}) in {conn.Layout.Id}");
+            var (x, y) = player.Walk.Position(player.Clock.Elapsed.TotalSeconds);
+            Console.WriteLine($"[gateway] {player.Connection.Remote} /pos ({x}, {y}) in {player.Layout.Id}");
+            await player.Commands!.Reply($"({x}, {y}) in {player.Layout.Id}");
         })
         .Add("tp", "/tp <x> <y> | <+dx> <+dy> | <id> | <name> [n] | list [filter] (dev: teleport to a cell, a monster, NPC, transition, waypoint or captured object, e.g. /tp RhoaChest 2)",
-            args => DevTeleport(remote, stream, ciphers, conn, args))
+            args => DevTeleport(player, args))
         .Add("mobs", "/mobs (list spawned monsters)", async _ =>
         {
-            // Copied under the lock: the AI and the emerge watch change both lists.
-            List<string> listed;
-            lock (conn.Monsters)
-            {
-                var buried = MonsterEmerge.Buried(conn);
-                var waiting = new HashSet<SpawnedMonster>(MonsterEmerge.Unrisen(conn), ReferenceEqualityComparer.Instance);
-                double now = conn.Clock.Elapsed.TotalSeconds;
-                listed = [.. conn.Monsters.Concat(buried).Select(m =>
-                    $"0x{m.Key:x} {m.Value.Label} {m.Value.Walk.Position(now)}" +
-                    (waiting.Contains(m.Value) ? buried.ContainsKey(m.Key) ? " (buried)" : " (lurking)" : m.Value.Aggro ? " (chasing)" : ""))];
-            }
-            await conn.Commands!.Reply(listed.Count == 0 ? "No monsters." : string.Join(", ", listed));
+            var buried = MonsterEmerge.Buried(player);
+            var waiting = new HashSet<SpawnedMonster>(MonsterEmerge.Unrisen(player), ReferenceEqualityComparer.Instance);
+            double now = player.Clock.Elapsed.TotalSeconds;
+            List<string> listed = [.. player.Area.Monsters.Concat(buried).Select(m =>
+                $"0x{m.Key:x} {m.Value.Label} {m.Value.Walk.Position(now)}" +
+                (waiting.Contains(m.Value) ? buried.ContainsKey(m.Key) ? " (buried)" : " (lurking)" : m.Value.Aggro ? " (chasing)" : ""))];
+            await player.Commands!.Reply(listed.Count == 0 ? "No monsters." : string.Join(", ", listed));
         })
         .Add("despawn", "/despawn [all | <id>] (default: the last one spawned)", async args =>
         {
-            List<uint> ids;
-            lock (conn.Monsters)
-                ids = args.Length == 0 ? [.. conn.Monsters.Keys.Concat(MonsterEmerge.Buried(conn).Keys).OrderBy(k => k).TakeLast(1)]
-                    : args[0].Equals("all", StringComparison.OrdinalIgnoreCase) ? [.. conn.Monsters.Keys, .. MonsterEmerge.Buried(conn).Keys]
-                    : [Convert.ToUInt32(args[0], args[0].StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? 16 : 10)];
+            List<uint> ids = args.Length == 0 ? [.. player.Area.Monsters.Keys.Concat(MonsterEmerge.Buried(player).Keys).OrderBy(k => k).TakeLast(1)]
+                : args[0].Equals("all", StringComparison.OrdinalIgnoreCase) ? [.. player.Area.Monsters.Keys, .. MonsterEmerge.Buried(player).Keys]
+                : [Convert.ToUInt32(args[0], args[0].StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? 16 : 10)];
             foreach (uint id in ids)
             {
-                bool removed;
-                lock (conn.Monsters) removed = conn.Monsters.Remove(id) || MonsterEmerge.Buried(conn).Remove(id);
-                if (!removed) { await conn.Commands!.Reply($"No monster 0x{id:x}."); continue; }
-                await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), $"0x02bd remove monster 0x{id:x}");
+                bool removed = player.Area.Monsters.Remove(id) || MonsterEmerge.Buried(player).Remove(id);
+                if (!removed) { await player.Commands!.Reply($"No monster 0x{id:x}."); continue; }
+                await SendWorldRemoval(player, id, $"0x02bd remove monster 0x{id:x}");
             }
         })
         // Movement probes: walk (0x1ba, Positioned move with a speed) or teleport (0x1b7) a monster to a few cells from the player.
         .Add("mob_move", "/mob_move [id] [speed] (0x1ba toward you; default the last monster, speed 20)", async args =>
         {
-            if (MonsterArg(conn, args, 0) is not { } id) { await conn.Commands!.Reply("No such monster."); return; }
+            if (MonsterArg(player, args, 0) is not { } id) { await player.Commands!.Reply("No such monster."); return; }
             string? sp = args.FirstOrDefault(a => !a.StartsWith("0x", StringComparison.OrdinalIgnoreCase));
             float speed = sp is null ? 20f : float.Parse(sp, System.Globalization.CultureInfo.InvariantCulture);
-            var (x, y) = NextToPlayer(conn);
-            await Send(remote, stream, ciphers, InstanceProtocol.MoveTo(id, x, y, speed), $"0x01ba move monster 0x{id:x} to ({x}, {y}) speed {speed}");
-            lock (conn.Monsters)
-            {
-                conn.Monsters[id].Walk = conn.NewMonsterWalk(id, x, y, conn.Monsters[id].Walk.Speed,
-                    LivingCollision.Size(conn.Monsters[id]), conn.Monsters[id].Rarity == MonsterRarity.Unique);
-            }
+            var (x, y) = NextToPlayer(player);
+            await Send(player, InstanceProtocol.MoveTo(id, x, y, speed), $"0x01ba move monster 0x{id:x} to ({x}, {y}) speed {speed}");
+            player.Area.Monsters[id].Walk = player.NewMonsterWalk(id, x, y, player.Area.Monsters[id].Walk.Speed,
+                LivingCollision.Size(player.Area.Monsters[id]), player.Area.Monsters[id].Rarity == MonsterRarity.Unique);
         })
         // Action probe: start the monster's Move action (0x1ab) toward the player, like the echo of a player's click. The skill
         // id is the player's Move (0x2909) unless given (hex); sequence 0xffff (the monster is not client-predicted).
         .Add("mob_walk", "/mob_walk [id] [skill hex] (0x1ab Move toward you)", async args =>
         {
-            if (MonsterArg(conn, args, 0) is not { } id) { await conn.Commands!.Reply("No such monster."); return; }
+            if (MonsterArg(player, args, 0) is not { } id) { await player.Commands!.Reply("No such monster."); return; }
             string? sk = args.FirstOrDefault(a => !a.StartsWith("0x", StringComparison.OrdinalIgnoreCase));
             ushort skill = sk is null ? (ushort)0x2909 : Convert.ToUInt16(sk, 16);
-            var (x, y) = NextToPlayer(conn);
-            (int X, int Y) from;
-            lock (conn.Monsters) from = conn.Monsters[id].Walk.Order(x, y, conn.Clock.Elapsed.TotalSeconds);
-            await Send(remote, stream, ciphers, InstanceProtocol.ActionStarted(id, from.X, from.Y, x, y, skill, 0xffff, 0x0408),
+            var (x, y) = NextToPlayer(player);
+            (int X, int Y) from = player.Area.Monsters[id].Walk.Order(x, y, player.Clock.Elapsed.TotalSeconds);
+            await Send(player, InstanceProtocol.ActionStarted(id, from.X, from.Y, x, y, skill, 0xffff, 0x0408),
                 $"0x01ab monster 0x{id:x} action skill 0x{skill:x4} from {from} to ({x}, {y})");
         })
         // Animation probe: play animation index `id` on the nearest living monster (0x1b2 kind 0). The Animated handler
@@ -1795,34 +1681,29 @@ static class GmCommands
         {
             if (args.Length < 1 || !uint.TryParse(args[0], out uint index)) throw new ArgumentException("an animation index");
             float speed = args.Length > 1 ? float.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture) : 1f;
-            var here = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-            uint? pick;
-            lock (conn.Monsters)
-                pick = conn.Monsters.Where(kv => kv.Value.Life > 0)
-                    .OrderBy(kv => Dist(here, kv.Value.Walk.Position(conn.Clock.Elapsed.TotalSeconds)))
-                    .Select(kv => (uint?)kv.Key).FirstOrDefault();
-            if (pick is not { } id) { await conn.Commands!.Reply("No living monster nearby."); return; }
-            await Send(remote, stream, ciphers, InstanceProtocol.AnimationUpdate(id, 0, index, speed),
+            var here = player.Walk.Position(player.Clock.Elapsed.TotalSeconds);
+            uint? pick = player.Area.Monsters.Where(kv => kv.Value.Life > 0)
+                .OrderBy(kv => Dist(here, kv.Value.Walk.Position(player.Clock.Elapsed.TotalSeconds)))
+                .Select(kv => (uint?)kv.Key).FirstOrDefault();
+            if (pick is not { } id) { await player.Commands!.Reply("No living monster nearby."); return; }
+            await Send(player, InstanceProtocol.AnimationUpdate(id, 0, index, speed),
                 $"0x01b2 monster 0x{id:x} play animation {index} at speed {speed}");
-            await conn.Commands!.Reply($"0x1b2 anim {index} (speed {speed}) -> monster 0x{id:x}");
+            await player.Commands!.Reply($"0x1b2 anim {index} (speed {speed}) -> monster 0x{id:x}");
         })
         .Add("mob_mods", "/mob_mods [id] [mod …|pool] (a monster's mods; with mods: create it again with those affixes, e.g. /mob_mods Quick of_Flames)",
-            args => MonsterModsCommand(remote, stream, ciphers, conn, args))
+            args => MonsterModsCommand(player, args))
         .Add("mob_tp", "/mob_tp [id] (0x1b7 next to you; default the last monster)", async args =>
         {
-            if (MonsterArg(conn, args, 0) is not { } id) { await conn.Commands!.Reply("No such monster."); return; }
-            var (x, y) = NextToPlayer(conn);
-            await Send(remote, stream, ciphers, InstanceProtocol.Teleport(id, x, y), $"0x01b7 teleport monster 0x{id:x} to ({x}, {y})");
-            lock (conn.Monsters)
-            {
-                conn.Monsters[id].Walk = conn.NewMonsterWalk(id, x, y, conn.Monsters[id].Walk.Speed,
-                    LivingCollision.Size(conn.Monsters[id]), conn.Monsters[id].Rarity == MonsterRarity.Unique);
-            }
+            if (MonsterArg(player, args, 0) is not { } id) { await player.Commands!.Reply("No such monster."); return; }
+            var (x, y) = NextToPlayer(player);
+            await Send(player, InstanceProtocol.Teleport(id, x, y), $"0x01b7 teleport monster 0x{id:x} to ({x}, {y})");
+            player.Area.Monsters[id].Walk = player.NewMonsterWalk(id, x, y, player.Area.Monsters[id].Walk.Speed,
+                LivingCollision.Size(player.Area.Monsters[id]), player.Area.Monsters[id].Rarity == MonsterRarity.Unique);
         })
         .Add("ai", "/ai [on|off] (monsters chase you when you come near; emerge monsters rise either way)", async args =>
         {
-            if (args.Length > 0) conn.AiEnabled = !args[0].Equals("off", StringComparison.OrdinalIgnoreCase);
-            await conn.Commands!.Reply($"Monster AI is {(conn.AiEnabled ? "on" : "off")}.");
+            if (args.Length > 0) player.AiEnabled = !args[0].Equals("off", StringComparison.OrdinalIgnoreCase);
+            await player.Commands!.Reply($"Monster AI is {(player.AiEnabled ? "on" : "off")}.");
         });
     }
 }

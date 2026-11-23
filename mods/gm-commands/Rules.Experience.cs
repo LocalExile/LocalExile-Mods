@@ -6,20 +6,19 @@ using Progression = GameServer.Core.World.Progression;
 
 static partial class GmCommandsRules
 {
-    internal static ExperienceChange RecordExperienceReset(ClientState conn, int level)
+    internal static ExperienceChange RecordExperienceReset(Player player, int level)
     {
-        var updates = LevelUpdatesFor(conn);
+        var updates = LevelUpdatesFor(player);
         lock (updates.Gate)
-        lock (conn.Monsters)
         {
-            if (HardcoreProgressBlocked(conn))
+            if (HardcoreProgressBlocked(player))
             {
-                uint held = CurrentExperience(conn);
+                uint held = CurrentExperience(player);
                 return new(updates.Revision, held, held, false);
             }
-            uint before = CurrentExperience(conn), after = CharacterStats.ExperienceFor(level);
-            CharacterSaves.SetExperience(CharacterName(conn), after);
-            conn.Experience = after;
+            uint before = CurrentExperience(player), after = CharacterStats.ExperienceFor(level);
+            CharacterSaves.SetExperience(CharacterName(player), after);
+            player.Character.Experience = after;
             return new(++updates.Revision, before, after, true, Reset: true);
         }
     }
