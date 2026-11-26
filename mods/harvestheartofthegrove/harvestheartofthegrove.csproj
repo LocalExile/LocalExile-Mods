@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Heart of the Grove (README.md), formerly LocalExile's Legacy module of the same name, its source unchanged: it uses
+       the Harvest module's public API, and the static usings a module's build gives. -->
+  <ItemGroup>
+    <ProjectReference Include="$(LocalExileDir)Modules\Core\Content\Harvest\Harvest.csproj" Private="false" />
+    <Using Include="Program" Static="true" />
+    <Using Include="Game" Static="true" />
+  </ItemGroup>
+
+</Project>

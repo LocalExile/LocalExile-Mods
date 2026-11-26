@@ -14,7 +14,8 @@ Official mods for [LocalExile](https://github.com/LocalExile/LocalExile), the lo
 add their own or improve one by pull request.
 
 A mod is a folder with a `mod.json` and either C# scripts (`.cs` files), which the LocalExile Gateway compiles when it
-loads them, or a C# project, whose built `.dll` is published in the mod's releases.
+loads them, or a C# project, whose built `.dll` is published in the mod's releases. Most mods run in every league; one
+that is a league's own content runs only in the leagues that list it, and may bring that league with it.
 
 ## To install a mod
 Use **Waypoint**, LocalExile's launcher. Its Browse panel lists this repository's mods and installs one with a click:
@@ -27,7 +28,7 @@ By hand, without Waypoint:
    becomes `Mods/Binaries/<id>/`. For a script mod that is `mods/<id>/` from this repository; for a project mod, the
    contents of its release zip.
 2. Start the game as usual with `LocalExile.exe` (or `live.ps1` in a checkout). A Gateway that is already running loads the
-   mod by itself within a second.
+   mod by itself within a second; a mod that brings a league or world data needs the servers restarted.
 3. In game, `/mod` lists the mods and why any did not load; `/mod_enable <id>` and `/mod_disable <id>` turn one on or off.
 
 Each mod's own `README.md` says what it does, its chat commands, its settings and the LocalExile versions it works with.
@@ -54,6 +55,12 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [mapdrop](mods/mapdrop/) | Configurable bonus map rolls for eligible kills |
 | [pob](mods/pob/) | preview and import character builds through an external converter; requires LocalExile #639 |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
+| [harvestheartofthegrove](mods/harvestheartofthegrove/) | the 3.13 Heart of the Grove: now and then a map's Sacred Grove holds Oshabi's encounter instead of crops; a league's mod |
+| [idols](mods/idols/) | Legacy of Phrecia's Idols: items with map modifiers for every map you open, the 41 unique ones too; a league's mod |
+| [nessadevelopmenttabs](mods/nessadevelopmenttabs/) | Nessa sells Awakened and Exceptional Gems and Maps of every kind; a league's mod |
+| [phreciaascendancies](mods/phreciaascendancies/) | Legacy of Phrecia's alternate ascendancy classes and the Phrecia league; a league's mod |
+| [playerbots](mods/playerbots/) | server-driven characters that play the campaign, visit the towns and join a party; a league's mod |
+| [survivors](mods/survivors/) | the Survivors league: survive the horde, skills cast themselves, an upgrade each run level; a league's mod |
 | [excitingitems](mods/excitingitems/) | rare drop surprises: unique modifiers as extra implicits, empowered modifiers and a fractured extra modifier, all configurable |
 
 ## Contributing

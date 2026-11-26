@@ -19,6 +19,8 @@
     <OutputPath Condition="'$(ModReleaseOutput)' != ''">$(ModReleaseOutput)</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- The leagues and world data a mod brings are not the project's own sources or files: copied below. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Leagues\**;sql\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,5 +33,7 @@
     <None Include="mod.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="settings.json" Condition="Exists('settings.json')" CopyToOutputDirectory="PreserveNewest" />
     <None Remove="README.md" />
+    <!-- As they are: a league's sources are the Gateway's to compile. -->
+    <Content Include="Leagues\**;sql\**" Exclude="Leagues\*\Binaries\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

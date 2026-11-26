@@ -8,14 +8,14 @@ and running LocalExile itself is in its [AGENTS.md](https://github.com/LocalExil
 
 ## What belongs here
 
-A mod is custom content that each player opts into, for every league. It changes how LocalExile's modules, leagues or
-framework behave, or gives the player tools for development, testing and practice (GM commands, teleports, every MTX
-owned). What is not a mod ([LocalExile's AGENTS.md](https://github.com/LocalExile/LocalExile/blob/main/AGENTS.md),
-"What goes where"):
+A mod is content that each player opts into. Most run in every league: they change how LocalExile's modules, leagues or
+framework behave, or give the player tools for development, testing and practice (GM commands, teleports, every MTX
+owned). A mod can also be a league's own content ([A league's mod](#a-leagues-mod)). What goes where:
 
-- **A replica of the real game is never a mod.** A GGG-like server needs zero mods; what GGG's servers do is a module in
-  LocalExile (`Modules/Core/` or `Modules/Legacy/`).
-- **A league never needs a mod.** A system one league builds on is a module in LocalExile (`Modules/Custom/`).
+- **The current game is never a mod.** A GGG-like server needs zero mods; what GGG's servers do in the game version
+  LocalExile targets is a module in LocalExile (`Modules/Core/`).
+- **What is not the current game is a mod here:** a league or system from another version of the game (a past league,
+  an event's rules) and a custom league or system. What LocalExile's `Modules/Legacy/` and `Modules/Custom/` held is here.
 - **A mod asks LocalExile only for general hooks.** A mod uses LocalExile's server as a module does (the Gateway, Core
   and the Game module). When it needs the framework to hand it something new, that LocalExile pull request adds a hook
   or event any mod could use; the feature's logic, settings and defaults stay here, in the mod. An API shaped for this
@@ -28,7 +28,7 @@ Every mod is a folder under `mods/`, named by its id (lower case):
 ```
 mods/<id>/
   mod.json       { "id": "<id>", "name": "…", "description": "…", "author": "…", "version": "1.0.0",
-                 "compatibleClientVersions": ["0.2.0-beta"], "depends": [] }
+                 "compatibleClientVersions": ["0.2.0-beta"], "depends": [], "leagues": "all" }
   README.md      what it does, its chat commands, its settings, the LocalExile versions it works with
   settings.json  only when it has something to tune
   icon.png       optional: what Waypoint shows for the mod
@@ -69,6 +69,30 @@ mods/<id>/
 - **Run `tools/build-index.ps1` and commit `mods.json`** with every change to a mod: it is the index Waypoint's Browse
   panel reads, and the pull request check fails when it is out of date. The script also checks the rules above.
 
+## A league's mod
+
+A mod with `"leagues": "listed"` in its `mod.json` loads and runs only for the leagues that list it, as a
+module does, and may give those leagues their rules (LocalExile's mod guide, "Leagues"). Any mod may bring leagues
+and world data in its folder, laid out as LocalExile's own; its build and its release zip carry them as they are.
+
+```
+mods/<id>/
+  Leagues/<Name>/     league.json ("mods": ["<id>"] names the mods it is made of), modules.json, Source/*.cs
+  sql/updates/world/  dated update files for the world database, as LocalExile's own
+```
+
+- The id is not the id of a LocalExile module in any case, unless the mod is that module moved here: while LocalExile
+  still has the module, the module runs and the mod waits.
+- A module that moves here keeps its sources and its `IModule` entry class. Its `module.json` becomes a `mod.json` as
+  above, keeping `depends` and without `assembly`. Its project adds what a module's build gave it:
+  `<Using Include="Program" Static="true" />`, `<Using Include="Game" Static="true" />`, a reference to each
+  LocalExile module it uses (`$(LocalExileDir)Modules\...\<Name>.csproj`, `Private="false"`) and
+  `<InternalsVisibleTo Include="<id>" />` for each mod that uses its internals.
+- A world data file is never changed after its mod is released: a fix is a new file. It names its columns, and its
+  rows do nothing without the mod's code (LocalExile's `Agents/docs/dev/databases.md`, "The updater").
+- Leagues and world data are read when the servers start: installing such a mod, or turning it on or off, needs a
+  restart. Say so in its README. It keeps what it saves in `data/mods/<id>/`, never in its own folder.
+
 ## Releases
 
 Waypoint, LocalExile's launcher, is the hub that installs mods. Its Browse panel lists a repository's mods from its
@@ -77,7 +101,8 @@ without one, from its source. It also installs a mod folder from disk.
 
 - Each mod is released on its own: tag `<id>-v<version>`, matching `version` in its `mod.json`, with the asset
   `<id>-<version>.zip` holding exactly what goes into `Mods/Binaries/<id>/` (`mod.json`, `settings.json`, the scripts or
-  the built `.dll`, its other files). The release notes say which LocalExile versions it works with.
+  the built `.dll`, its other files, its `Leagues/` and `sql/`). The release notes say which LocalExile versions it
+  works with.
 - A maintainer pushes the tag; the `Mod release` workflow builds the zip with `tools/build-release.ps1` against
   LocalExile's `main` (or the ref in the repository variable `LOCALEXILE_REF`) and makes a draft release, which the
   maintainer publishes after trying it in game. `tools/build-release.ps1 <id>` builds the same zip into `out/`.

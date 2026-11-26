@@ -4,7 +4,7 @@
 .DESCRIPTION
   The zip holds exactly what goes into a LocalExile's Mods/Binaries/<id>/ (AGENTS.md, "Releases"):
   - a project mod: its build output, <id>.dll with mod.json, settings.json and the other files it copies, without the
-    server's own assemblies (the Gateway has them) or .pdb files;
+    server's own assemblies (the Gateway has them) or .pdb files, and with the Leagues/ and sql/ folders it brings;
   - a script mod: its folder, without README.md.
   A project mod builds against GameServer.Modding, the Gateway, Core and Game of the LocalExile checkout in -LocalExileRoot (by default LocalExile/
   beside this repository); the notes name that checkout's commit. The build goes to out/, never into that checkout's
@@ -63,12 +63,17 @@ if ($projects.Count -eq 1) {
     if ($LASTEXITCODE -ne 0) { throw "The build of $Id failed." }
     if (-not (Test-Path -LiteralPath (Join-Path $output "$Id.dll"))) { throw "The build of $Id made no $Id.dll." }
     # The server's own assemblies and LocalExile's modules are referenced, not shipped: every mod uses the Gateway's. A
-    # copy of one in the mod's folder would load as a type of its own.
+    # copy of one in the mod's folder would load as a type of its own. The mod's own assembly is shipped also while
+    # LocalExile still has a module of that name (a module that became this mod).
     $server = @(Get-ChildItem -LiteralPath (Join-Path $LocalExileRoot 'Modules') -Filter 'module.json' -File -Recurse |
-        ForEach-Object { [IO.Path]::GetFileName((Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).assembly) })
+        ForEach-Object { [IO.Path]::GetFileName((Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).assembly) } |
+        Where-Object { $_ -ne "$Id.dll" })
     Get-ChildItem -LiteralPath $output -File |
         Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notlike 'GameServer.*' -and $_.Name -notin $server } |
         Copy-Item -Destination $stage
+    # The leagues and world data it brings (mods/Directory.Build.props copies them to the build).
+    Get-ChildItem -LiteralPath $output -Directory | Where-Object { $_.Name -in 'Leagues', 'sql' } |
+        Copy-Item -Destination $stage -Recurse
     $built = 'project'
 } else {
     if (-not @(Get-ChildItem -LiteralPath $folder -Filter '*.cs' -File).Count) { throw "mods/$Id has no scripts and no project." }
@@ -94,6 +99,9 @@ $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add("$($manifest.name) ${version}: $($manifest.description)")
 $lines.Add('')
 $lines.Add("Install it with Waypoint's Browse panel, or extract ``$name.zip`` into ``Mods/Binaries/$Id/`` of your LocalExile.")
+if (@(Get-ChildItem -LiteralPath $stage -Directory | Where-Object { $_.Name -in 'Leagues', 'sql' }).Count) {
+    $lines.Add('Then restart the servers: the leagues and world data it brings are read when they start.')
+}
 if ($built -eq 'project') {
     $commit = (& git -C $LocalExileRoot rev-parse HEAD).Trim()
     $describe = (& git -C $LocalExileRoot describe --tags --always 2>$null)

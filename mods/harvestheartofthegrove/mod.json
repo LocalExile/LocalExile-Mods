@@ -1,0 +1,16 @@
+{
+  "id": "harvestheartofthegrove",
+  "name": "Heart of the Grove",
+  "description": "The 3.13 Heart of the Grove: on rare occasions a map's Sacred Grove holds Oshabi's encounter instead of crops.",
+  "author": "mrnamwen",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta"
+  ],
+  "kind": "feature",
+  "leagues": "listed",
+  "depends": [
+    "Game",
+    "Harvest"
+  ]
+}

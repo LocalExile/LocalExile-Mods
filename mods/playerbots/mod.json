@@ -1,0 +1,16 @@
+{
+  "id": "playerbots",
+  "name": "Player bots",
+  "description": "Server-driven characters that play the campaign, visit the towns and can join a party, so a server feels lived in.",
+  "author": "nikolos89",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta"
+  ],
+  "kind": "feature",
+  "leagues": "listed",
+  "depends": [
+    "Game",
+    "Social"
+  ]
+}

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Survivors (README.md), formerly LocalExile's three Custom modules SurvivorsSkills, SurvivorsRewards and SurvivorsRun,
+       one folder each, their sources unchanged but for the id the run checks. It uses the game module's API, and the
+       static usings a module's build gives. It brings the Survivors league (Leagues/). -->
+  <PropertyGroup>
+    <!-- The host loads the three entry classes in the order they are compiled: the modules' own load order. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="SurvivorsSkills\**\*.cs" />
+    <Compile Include="SurvivorsRewards\**\*.cs" />
+    <Compile Include="SurvivorsRun\**\*.cs" />
+    <Using Include="Program" Static="true" />
+    <Using Include="Game" Static="true" />
+    <!-- The tests that came with it (tests/) read its internals. -->
+    <InternalsVisibleTo Include="GameServer.Gateway.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Server-driven player bots (README.md), formerly LocalExile's Custom module PlayerBots. Everything else is in
+       Directory.Build.props. It uses what is public: Game and Program are named where they are used. -->
+  <ItemGroup>
+    <ProjectReference Include="$(LocalExileDir)Modules\Core\Player\Social\Social.csproj" Private="false" />
+    <!-- The route it reads at run time. -->
+    <None Update="story-main.md;story-side.md" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The bots' tests from LocalExile, kept with the mod: they need LocalExile's test project, and are not built here
+         until this repository runs tests. -->
+    <Compile Remove="tests\**" />
+  </ItemGroup>
+
+</Project>

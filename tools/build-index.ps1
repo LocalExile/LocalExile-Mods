@@ -68,6 +68,14 @@ foreach ($folder in $folders) {
         if ($client -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { $problems.Add("${where}/mod.json: compatibleClientVersions holds '$client', not a LocalExile version such as 0.2.0-beta") }
     }
 
+    # As the Gateway reads them: the value a string, the two folders in that case (a Linux server finds no other).
+    $leaguesProperty = $manifest.PSObject.Properties | Where-Object { $_.Name -ieq 'leagues' } | Select-Object -First 1
+    $leagues = 'all'
+    if ($leaguesProperty -and $leaguesProperty.Value -is [string]) { $leagues = $leaguesProperty.Value }
+    if ($leaguesProperty -and $leagues -cne $leaguesProperty.Value -or $leagues -cnotin 'all', 'listed') { $problems.Add("${where}/mod.json: leagues is not ""all"" or ""listed"""); $leagues = 'all' }
+    Get-ChildItem -LiteralPath $folder.FullName -Directory | Where-Object { $_.Name -in 'Leagues', 'sql' -and $_.Name -cnotin 'Leagues', 'sql' } |
+        ForEach-Object { $problems.Add("${where}: the folder $($_.Name) is named Leagues or sql, in that case") }
+
     $depends = @()
     $dependsProperty = $manifest.PSObject.Properties | Where-Object { $_.Name -ieq 'depends' } | Select-Object -First 1
     if ($dependsProperty -and $dependsProperty.Value) { $depends = @($dependsProperty.Value | ForEach-Object { [string]$_ }) }
@@ -83,6 +91,7 @@ foreach ($folder in $folders) {
         type        = Quote ($(if ($projects.Count) { 'project' } else { 'script' }))
         path        = Quote $where
         depends     = '[' + (($depends | ForEach-Object { Quote $_ }) -join ', ') + ']'
+        leagues     = Quote $leagues
         settings    = $(if (Test-Path -LiteralPath (Join-Path $folder.FullName 'settings.json')) { 'true' } else { 'false' })
     }
     $entries += '    { ' + (($fields.Keys | ForEach-Object { "$(Quote $_): $($fields[$_])" }) -join ', ') + ' }'

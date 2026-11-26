@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Phrecia classes (README.md), formerly LocalExile's Legacy module PhreciaAscendancies, its source unchanged: it
+       uses the game module's API, and the static usings a module's build gives. It brings the Phrecia league (Leagues/). -->
+  <ItemGroup>
+    <Using Include="Program" Static="true" />
+    <Using Include="Game" Static="true" />
+    <!-- The tests that came with it (tests/) read its internals. -->
+    <InternalsVisibleTo Include="GameServer.Gateway.Tests" />
+    <!-- Its tests from LocalExile, kept with the mod: they need LocalExile's test project, and are not built here until
+         this repository runs tests. -->
+    <Compile Remove="tests\**" />
+  </ItemGroup>
+
+</Project>

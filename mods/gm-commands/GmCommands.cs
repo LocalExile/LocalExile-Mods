@@ -946,10 +946,10 @@ static class GmCommands
                 var current = Game.AscendancyRules.Validate(baseClass, player.Character.MainAscendancy);
                 int spent = Game.AscendancyRules.SpentPoints(baseClass, player.Character.MainAscendancy);
                 await player.Commands!.Reply($"Main ascendancy - {current?.Name ?? "none"}. Ascendancy points {spent}/{player.Character.MainAscendancy.EarnedPoints}.\n" +
-                    string.Join("\n", choices.Select(c => $"/ascendancy {c.Identity.Family.ToString().ToLowerInvariant()} {c.Name}")));
+                    string.Join("\n", choices.Select(c => $"/ascendancy {c.Identity.Family.Name().ToLowerInvariant()} {c.Name}")));
                 return;
             }
-            bool hasFamily = Enum.TryParse<AscendancyFamily>(args[0], true, out var family) && Enum.IsDefined(family);
+            bool hasFamily = AscendancyFamilies.TryNamed(args[0], out var family);
             string name = string.Join(' ', hasFamily ? args[1..] : args);
             var matching = choices.Where(c => (!hasFamily || c.Identity.Family == family) &&
                 (c.Name.Equals(name, StringComparison.OrdinalIgnoreCase) || c.Identity.Id.Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();

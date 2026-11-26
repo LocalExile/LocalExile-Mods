@@ -1,0 +1,15 @@
+{
+  "id": "phreciaascendancies",
+  "name": "Phrecia ascendancies",
+  "description": "Legacy of Phrecia's alternate ascendancy classes and the Phrecia league, which also needs the idols mod.",
+  "author": "shimonshi",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta"
+  ],
+  "kind": "feature",
+  "leagues": "listed",
+  "depends": [
+    "Game"
+  ]
+}

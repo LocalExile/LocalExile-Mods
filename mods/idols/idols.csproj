@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Idols (README.md), formerly LocalExile's Legacy module of the same name, its source unchanged: it uses the game
+       module's API, and the static usings a module's build gives. Its unique Idols are in sql/. -->
+  <ItemGroup>
+    <Using Include="Program" Static="true" />
+    <Using Include="Game" Static="true" />
+    <!-- Its tests from LocalExile, kept with the mod: they need LocalExile's test project, and are not built here until
+         this repository runs tests. -->
+    <Compile Remove="tests\**" />
+  </ItemGroup>
+
+</Project>

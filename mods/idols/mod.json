@@ -1,0 +1,15 @@
+{
+  "id": "idols",
+  "name": "Idols",
+  "description": "Legacy of Phrecia's Idols: items with map modifiers that affect every map you open while they lie in the Idol inventory.",
+  "author": "mrnamwen",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta"
+  ],
+  "kind": "feature",
+  "leagues": "listed",
+  "depends": [
+    "Game"
+  ]
+}

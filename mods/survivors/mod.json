@@ -1,0 +1,20 @@
+{
+  "id": "survivors",
+  "name": "Survivors",
+  "description": "The Survivors league: survive the horde; skills cast themselves, and each run level offers an upgrade.",
+  "author": "GafGafGaf5612",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta"
+  ],
+  "kind": "feature",
+  "leagues": "listed",
+  "only": [
+    "Cosmetics",
+    "Chat",
+    "Commands"
+  ],
+  "depends": [
+    "Game"
+  ]
+}

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Nessa's development tabs (README.md), formerly LocalExile's Custom module of the same name, its source unchanged.
+       Everything else is in Directory.Build.props. -->
+
+</Project>

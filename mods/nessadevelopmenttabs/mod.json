@@ -1,0 +1,15 @@
+{
+  "id": "nessadevelopmenttabs",
+  "name": "Nessa's development tabs",
+  "description": "Nessa sells Awakened Gems, Exceptional Gems, Maps, Originator Maps and Unique Maps in the leagues that list this mod.",
+  "author": "evrydayjunglist",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta"
+  ],
+  "kind": "feature",
+  "leagues": "listed",
+  "depends": [
+    "Game"
+  ]
+}
