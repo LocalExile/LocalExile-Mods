@@ -3,9 +3,10 @@
   "name": "Pet Loot",
   "description": "Worn pets collect selected currency with per-character filters and an immediate pause switch.",
   "author": "zj1022",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "compatibleClientVersions": [
-    "0.6.0-beta"
+    "0.6.0-beta",
+    "0.6.1-beta"
   ],
   "kind": "feature",
   "depends": [
