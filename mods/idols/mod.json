@@ -5,7 +5,7 @@
   "author": "mrnamwen",
   "version": "1.0.0",
   "compatibleClientVersions": [
-    "0.6.0-beta"
+    "0.6.1-beta"
   ],
   "kind": "feature",
   "leagues": "listed",

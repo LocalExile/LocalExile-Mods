@@ -40,6 +40,7 @@ None.
 
 ## Works with
 
+1.0.5: LocalExile v0.6.1-beta (the same code as 1.0.4, built against v0.6.1-beta's chat line).
 1.0.4: LocalExile v0.6.0-beta (`Player`, `GameEvents.AreaTick`).
 1.0.3: LocalExile v0.4.3-beta, v0.5.0-beta, v0.5.1-beta and v0.5.2-beta; it fixes Give item answering that the mod is not loaded
 after Waypoint was started while the game ran. 1.0.2: the same versions (the same code as 1.0.1); 1.0.0: v0.4.2-beta. It needs no other mod: it uses the server and LocalExile's Game module directly, as a module

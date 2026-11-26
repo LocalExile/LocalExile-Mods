@@ -30,8 +30,8 @@ differ. List `survivors` there in place of all three, in the same change, as the
 
 ## LocalExile versions
 
-Needs a LocalExile with league mods ([LocalExile #1588](https://github.com/LocalExile/LocalExile/pull/1588)): the first
-release after 0.6.0-beta. While a LocalExile still has the Custom modules, they run, LocalExile's own Survivors league
+Needs a LocalExile with league mods ([LocalExile #1588](https://github.com/LocalExile/LocalExile/pull/1588)): works with
+LocalExile v0.6.1-beta. While a LocalExile still has the Custom modules, they run, LocalExile's own Survivors league
 is the one used, and this mod is not loaded, as no league lists it.
 
 `tests/` holds its tests from LocalExile as they were for the three modules; they need LocalExile's test project and do
