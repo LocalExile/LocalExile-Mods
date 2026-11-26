@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- GM Web Tool: serves gm.html on loopback and runs its picked commands in game. Everything else is in
+       Directory.Build.props. -->
+
+  <ItemGroup>
+    <None Include="gm.html" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
