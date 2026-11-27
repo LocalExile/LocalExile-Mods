@@ -1,0 +1,40 @@
+// Skip Campaign — CreateCharacterBar mirror toggle for PoE 3.29.
+// Mirrors the LeagueOverlay "Skip Campaign" mode checkbox when a Character Select
+// league filter skips auto-opening LeagueOverlay.
+
+<DEFINITIONS>
+
+begin Frame
+	id = skip_campaign_bar;
+	size = 560, 58;
+	visible = true;
+	mouse_enabled = true;
+	propagate_properties = false;
+	border = normal,
+		"Art/2DArt/UIImages/Common/OrnateTopLeft", "Art/2DArt/UIImages/Common/OrnateTop", "Art/2DArt/UIImages/Common/OrnateTopRight",
+		"Art/2DArt/UIImages/Common/OrnateLeft", "Art/2DArt/UIImages/Common/OrnateRight",
+		"Art/2DArt/UIImages/Common/OrnateBottomLeft", "Art/2DArt/UIImages/Common/OrnateBottom", "Art/2DArt/UIImages/Common/OrnateBottomRight";
+	border_position = outside;
+	background = "Art/2DArt/UIImages/Common/Background1", tile;
+
+	begin CheckBox
+		id = skip_campaign_checkbox;
+		location = 16, 8;
+		size = 300, 42;
+		font = Fonts.NormalSC;
+		foreground_colour = Colours.LabelTextColour;
+		text_side = right;
+		text = "Skip Campaign";
+		visible = true;
+	end
+
+	begin Label
+		id = skip_campaign_status;
+		location = 330, 14;
+		size = 216, 32;
+		auto_size = false;
+		font = Fonts.Normal;
+		foreground_colour = rgb( 185, 178, 162 );
+		text = "Normal Start";
+	end
+end

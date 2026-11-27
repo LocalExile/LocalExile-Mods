@@ -62,6 +62,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [playerbots](mods/playerbots/) | server-driven characters that play the campaign, visit the towns and join a party; a league's mod |
 | [survivors](mods/survivors/) | the Survivors league: survive the horde, skills cast themselves, an upgrade each run level; a league's mod |
 | [excitingitems](mods/excitingitems/) | rare drop surprises: unique modifiers as extra implicits, empowered modifiers and a fractured extra modifier, all configurable |
+| [skip-campaign](mods/skip-campaign/) | opt-in Skip Campaign toggle on character creation (with NativeMods) and `/skipcampaign apply` fallback to spawn directly in Karui Shores at Lv.68 with campaign quest flags, passive books, Kitava penalties, waypoints, refund points, ascendancy trials, and starting gold |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to

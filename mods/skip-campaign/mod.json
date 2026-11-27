@@ -1,0 +1,42 @@
+{
+  "id": "skip-campaign",
+  "name": "Skip Campaign",
+  "description": "Adds an opt-in Skip Campaign toggle to character creation (with NativeMods) and /skipcampaign fallback so eligible characters start directly in Karui Shores with campaign quest flags, passive books, Kitava penalties, waypoints, refund points, and ascendancy trials applied.",
+  "author": "mrnamwen",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.1-beta"
+  ],
+  "kind": "feature",
+  "depends": [
+    "Game"
+  ],
+  "leagues": "all",
+  "enabled": true,
+  "nativeClient": {
+    "required": false,
+    "sdkVersionRange": ">=0.3.0 <2.0.0",
+    "supportedBuilds": [
+      "3.29.3d",
+      "3.29.3c"
+    ],
+    "assembly": "skip-campaign.Client.dll",
+    "payloadDir": "client-assets",
+    "overlays": [
+      "Metadata/UI/Mods/skip-campaign/CreateCharacterSkipBar.ui",
+      "Metadata/UI/Mods/skip-campaign/SkipCampaignBanner.ui"
+    ],
+    "replaces": [],
+    "rawAccess": false,
+    "customOpcodes": [],
+    "gealBuiltins": [],
+    "customControls": [],
+    "contentRegistries": [],
+    "serverHalf": {
+      "id": "skip-campaign",
+      "minVersion": "1.0.0",
+      "supportsGracefulFallback": true,
+      "channelName": "skip-campaign"
+    }
+  }
+}

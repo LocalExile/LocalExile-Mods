@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Project mod built via mods/Directory.Build.props against LocalExile (GameServer.Modding, Gateway, Core, Game).
+       The optional NativeMods client plugin lives under Client/ with its own Directory.Build.props and project,
+       and its UI layout overlay lives under client-assets/. -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Client\**;client-assets\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="icon.png" Condition="Exists('icon.png')" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
