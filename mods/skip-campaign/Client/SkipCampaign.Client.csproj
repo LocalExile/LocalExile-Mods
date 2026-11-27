@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- NativeMods client plugin for skip-campaign.
+       Builds skip-campaign.Client.dll into <LocalExileRoot>/Mods/Client/skip-campaign/ beside mod.json.
+       Pass -p:LocalExileRoot=<path> and/or -p:NativeModsRoot=<path> to override sibling repository locations. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>LocalExile.Mods.SkipCampaign.Client</RootNamespace>
+    <AssemblyName>skip-campaign.Client</AssemblyName>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+
+    <LocalExileRoot Condition="'$(LocalExileRoot)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\..\..\LocalExile\src\GameServer.Modding\GameServer.Modding.csproj')">$(MSBuildThisFileDirectory)..\..\..\..\LocalExile\</LocalExileRoot>
+    <LocalExileRoot Condition="'$(LocalExileRoot)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\..\..\..\LocalExile\src\GameServer.Modding\GameServer.Modding.csproj')">$(MSBuildThisFileDirectory)..\..\..\..\..\LocalExile\</LocalExileRoot>
+    <LocalExileDir Condition="'$(LocalExileRoot)' != ''">$([MSBuild]::EnsureTrailingSlash('$(LocalExileRoot)'))</LocalExileDir>
+
+    <NativeModsRoot Condition="'$(NativeModsRoot)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\..\..\NativeMods\src\LocalExile.Client.Sdk\LocalExile.Client.Sdk.csproj')">$(MSBuildThisFileDirectory)..\..\..\..\NativeMods\</NativeModsRoot>
+    <NativeModsDir Condition="'$(NativeModsRoot)' != ''">$([MSBuild]::EnsureTrailingSlash('$(NativeModsRoot)'))</NativeModsDir>
+    <_SdkProjectPath Condition="'$(NativeModsDir)' != ''">$(NativeModsDir)src\LocalExile.Client.Sdk\LocalExile.Client.Sdk.csproj</_SdkProjectPath>
+
+    <OutputPath Condition="'$(ModClientOutput)' != ''">$(ModClientOutput)</OutputPath>
+    <OutputPath Condition="'$(ModClientOutput)' == '' and '$(LocalExileDir)' != ''">$(LocalExileDir)Mods\Client\skip-campaign\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compile shared contract directly into skip-campaign.Client.dll so ClientModLoader loads it cleanly in a collectible ALC. -->
+    <Compile Include="..\SkipCampaignContract.cs" Link="Shared\SkipCampaignContract.cs" />
+
+    <!-- Compiled against LocalExile.Client.Sdk only (never copied: ClientModLoadContext unifies SDK from the host). -->
+    <ProjectReference Include="$(_SdkProjectPath)" Condition="'$(_SdkProjectPath)' != '' and Exists('$(_SdkProjectPath)')" Private="false" />
+    <PackageReference Include="LocalExile.Client.Sdk" Version="1.2.0" Condition="'$(_SdkProjectPath)' == '' or !Exists('$(_SdkProjectPath)')" ExcludeAssets="runtime" />
+
+    <!-- Copy unified mod.json alongside skip-campaign.Client.dll for NativeMods ClientModLoader. -->
+    <None Include="..\mod.json" Link="mod.json" Condition="Exists('..\mod.json')" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

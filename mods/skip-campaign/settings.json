@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "settings": {
+    "enabled": {
+      "type": "bool",
+      "default": true,
+      "label": "Enable Skip Campaign",
+      "description": "Allows players who check Skip Campaign during character creation (or run /skipcampaign apply) to start directly in endgame."
+    },
+    "requireLeagueCompletion": {
+      "type": "bool",
+      "default": false,
+      "label": "Require Prior League Completion",
+      "description": "When enabled, requires at least one living character in the exact same league (respecting SSF and Hardcore death isolation) at or above the completion level or in Karui Shores."
+    },
+    "startingAreaId": {
+      "type": "text",
+      "default": "2_11_endgame_town",
+      "minLength": 1,
+      "label": "Starting Town Area Id",
+      "description": "WorldAreas town Id assigned as LastTown before first area login (default: Karui Shores 2_11_endgame_town)."
+    },
+    "startingLevel": {
+      "type": "integer",
+      "default": 68,
+      "min": 1,
+      "max": 100,
+      "label": "Starting Character Level",
+      "description": "Initial character level applied before S->C 0x15 / 0x13 character creation completes."
+    },
+    "grantCampaignPassiveBooks": {
+      "type": "bool",
+      "default": true,
+      "label": "Grant Campaign Passive Books",
+      "description": "Applies all Acts 1-10 campaign Book of Skill quest flags (+23 passive points; Bandits are left open so you can still choose)."
+    },
+    "grantAscendancyTrials": {
+      "type": "bool",
+      "default": true,
+      "label": "Grant Campaign Ascendancy Trials",
+      "description": "Awards Normal, Cruel, and Merciless Labyrinth ascendancy points (6 points) on first login."
+    },
+    "startingGold": {
+      "type": "integer",
+      "default": 50000,
+      "min": 0,
+      "max": 10000000,
+      "label": "Starting Gold",
+      "description": "Gold credited to the player's league stash on first login."
+    },
+    "refundPoints": {
+      "type": "integer",
+      "default": 20,
+      "min": 0,
+      "max": 255,
+      "label": "Starting Refund Points",
+      "description": "Minimum passive refund points granted to skipped characters on first login."
+    }
+  }
+}

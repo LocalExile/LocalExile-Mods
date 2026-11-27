@@ -1,0 +1,40 @@
+// Skip Campaign — Verified 3.29 HUD arrival banner displayed when a skipped character enters Karui Shores.
+
+<DEFINITIONS>
+
+begin Frame
+	id = skip_campaign_banner;
+	aspect_mode = scaley;
+	size = 820, 112;
+	float = centre;
+	y = 84;
+	visible = true;
+	mouse_enabled = false;
+	propagate_properties = false;
+	border = normal,
+		"Art/2DArt/UIImages/Common/OrnateTopLeft", "Art/2DArt/UIImages/Common/OrnateTop", "Art/2DArt/UIImages/Common/OrnateTopRight",
+		"Art/2DArt/UIImages/Common/OrnateLeft", "Art/2DArt/UIImages/Common/OrnateRight",
+		"Art/2DArt/UIImages/Common/OrnateBottomLeft", "Art/2DArt/UIImages/Common/OrnateBottom", "Art/2DArt/UIImages/Common/OrnateBottomRight";
+	border_position = outside;
+	background = "Art/2DArt/UIImages/Common/Background1", tile;
+
+	begin Label
+		id = skip_campaign_banner_title;
+		location = 24, 14;
+		size = 772, 34;
+		auto_size = false;
+		font = Fonts.NormalSC;
+		foreground_colour = rgb( 164, 221, 124 );
+		text = "Campaign Skipped";
+	end
+
+	begin Label
+		id = skip_campaign_banner_body;
+		location = 24, 54;
+		size = 772, 44;
+		auto_size = false;
+		font = Fonts.Normal;
+		foreground_colour = Colours.White;
+		text = "Endgame progression applied.";
+	end
+end
