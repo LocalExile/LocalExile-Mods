@@ -64,6 +64,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [excitingitems](mods/excitingitems/) | rare drop surprises: unique modifiers as extra implicits, empowered modifiers and a fractured extra modifier, all configurable |
 | [deposit](mods/deposit/) | `/deposit` at your stash sends currency, fragments, cards, essences, gems and flasks to their special tabs in one go, with a keep list |
 | [currencyaura](mods/currencyaura/) | auto-loots currency near you like gold, with optional divination cards and scarabs, an adjustable radius and a never-pick-up list |
+| [thirdringslot](mods/thirdringslot/) | the third ring slot for every character, the stat The Unseen Hand grants, without the ascendancy |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to
