@@ -1700,6 +1700,105 @@ static class GmCommands
             player.Area.Monsters[id].Walk = player.NewMonsterWalk(id, x, y, player.Area.Monsters[id].Walk.Speed,
                 LivingCollision.Size(player.Area.Monsters[id]), player.Area.Monsters[id].Rarity == MonsterRarity.Unique);
         })
+        // One entity, any monster: its own actor skills (by the GrantedEffects Id the client shows), its life or its
+        // animation, without its AI choosing them. The verb comes first so it reads as an action; the entity id (hex)
+        // may lead or trail the verb, and without one the nearest living monster is used and named in the reply.
+        .Add("entity", "/entity <id or nearest> <skills | skill <name or 0x skill id> | kill | life <pct> | anim <index> [speed] | list> (dev: one action of any monster; /entity skills names its own, /entity list shows what is near)",
+            async args =>
+        {
+            double now = player.Clock.Elapsed.TotalSeconds;
+            var here = player.Walk.Position(now);
+            uint? id = null;
+            if (args.Length > 0 && args[0].StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                uint parsed = Convert.ToUInt32(args[0], 16);
+                if (player.Area.Monsters.ContainsKey(parsed)) id = parsed;
+                if (id is null) { await player.Commands!.Reply($"No monster {args[0]}."); return; }
+                args = args[1..];
+            }
+            string verb = args.Length > 0 ? args[0].ToLowerInvariant() : "";
+            string? idText = verb switch
+            {
+                "skill" or "life" => args.Length > 2 && args[2].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                    ? args[2] : null,
+                "kill" => args.Length > 1 && args[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                    ? args[1] : null,
+                "anim" => args.Length > 2 && args[^1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                    ? args[^1] : null,
+                _ => null,
+            };
+            if (id is null && idText is not null)
+            {
+                uint parsed = Convert.ToUInt32(idText, 16);
+                if (player.Area.Monsters.ContainsKey(parsed)) id = parsed;
+                if (id is null) { await player.Commands!.Reply($"No monster {idText}."); return; }
+            }
+            if (verb == "list")
+            {
+                List<string> listed = [.. player.Area.Monsters.Where(kv => kv.Value.Life > 0)
+                    .OrderBy(kv => Dist(here, kv.Value.Walk.Position(now))).Take(12)
+                    .Select(kv => $"0x{kv.Key:x} {kv.Value.Label} {kv.Value.Walk.Position(now)} "
+                        + $"{(ulong)kv.Value.Life * 100 / Math.Max(1u, kv.Value.MaxLife)}%")];
+                await player.Commands!.Reply(listed.Count == 0 ? "No living monsters." : string.Join(", ", listed));
+                return;
+            }
+            if (id is null)
+                id = player.Area.Monsters.Where(kv => kv.Value.Life > 0)
+                    .OrderBy(kv => Dist(here, kv.Value.Walk.Position(now)))
+                    .Select(kv => (uint?)kv.Key).FirstOrDefault();
+            if (id is null) { await player.Commands!.Reply("No living monster here; give an id (/mobs lists them)."); return; }
+            SpawnedMonster m = player.Area.Monsters[id.Value];
+            string who = $"0x{id:x} {m.Label}";
+            switch (verb)
+            {
+                case "skills":
+                    var actions = MonsterActions.Names(player, id.Value);
+                    await player.Commands!.Reply(actions is { Count: > 0 }
+                        ? $"{who}: {string.Join(", ", actions)}"
+                        : $"{who}: the server knows no skill of its actor.");
+                    return;
+                case "skill":
+                    if (args.Length < 2) { await player.Commands!.Reply("A skill name or a 0x skill id."); return; }
+                    if (!args[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                    {
+                        bool taken = await MonsterActions.Use(player, id.Value, args[1]);
+                        await player.Commands!.Reply(taken ? $"{who}: {args[1]}."
+                            : $"{who}: it does not carry \"{args[1]}\" (see /entity skills).");
+                        return;
+                    }
+                    ushort skill = Convert.ToUInt16(args[1], 16);
+                    var (x, y) = NextToPlayer(player);
+                    (int X, int Y) from = m.Walk.Order(x, y, now);
+                    await Send(player, InstanceProtocol.ActionStarted(id.Value, from.X, from.Y, x, y, skill, 0xffff, 0x0408),
+                        $"0x01ab monster 0x{id:x} action skill 0x{skill:x4} from {from} to ({x}, {y})");
+                    await player.Commands!.Reply($"{who}: action 0x{skill:x4} (the clip only; the server owes no hit).");
+                    return;
+                case "kill":
+                    if (!m.Hostile) { await player.Commands!.Reply($"{who}: not a hostile monster."); return; }
+                    // The /kill command owns the normal death path (experience, drops and quests; a boss's stage skipped).
+                    await player.Commands!.RunAsync($"/kill 0x{id:x}");
+                    return;
+                case "life":
+                    if (args.Length < 2 || !int.TryParse(args[1], out int percent) || percent is < 1 or > 100)
+                    { await player.Commands!.Reply("A life percentage, 1 to 100."); return; }
+                    uint life = (uint)Math.Max(1, (ulong)m.MaxLife * (ulong)percent / 100);
+                    m.Life = life;
+                    await Send(player, InstanceProtocol.LifeUpdate(id.Value, life), $"0x01b1 monster 0x{id:x} life {life}");
+                    await player.Commands!.Reply($"{who}: life {percent}%.");
+                    return;
+                case "anim":
+                    if (args.Length < 2 || !uint.TryParse(args[1], out uint index))
+                    { await player.Commands!.Reply("An animation index and, optionally, its speed."); return; }
+                    float speed = args.Length > 2 && args[2] != idText
+                        ? float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 1f;
+                    await Send(player, InstanceProtocol.AnimationUpdate(id.Value, 0, index, speed),
+                        $"0x01b2 monster 0x{id:x} play animation {index} at speed {speed}");
+                    await player.Commands!.Reply($"{who}: animation {index} at speed {speed}.");
+                    return;
+            }
+            await player.Commands!.Reply($"{who}: verbs: skills, skill <name|0xskill> [id], kill [id], life <pct> [id], "
+                + "anim <index> [speed] [id], list.");
+        }, "entity")
         .Add("ai", "/ai [on|off] (monsters chase you when you come near; emerge monsters rise either way)", async args =>
         {
             if (args.Length > 0) player.AiEnabled = !args[0].Equals("off", StringComparison.OrdinalIgnoreCase);

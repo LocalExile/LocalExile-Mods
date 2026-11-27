@@ -3,7 +3,7 @@
   "name": "GM Commands",
   "description": "The development and testing chat commands: teleport, items, monsters, experience, quest flags, test hits and protocol probes.",
   "author": "LocalExile",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "compatibleClientVersions": [
     "0.6.1-beta"
   ],

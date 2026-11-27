@@ -1,0 +1,12 @@
+{
+  "id": "deposit",
+  "name": "Deposit All",
+  "description": "/deposit at your stash empties currency, fragments, divination cards, essences, gems and flasks from your inventory into their special tabs in one go. Choose which tabs it fills and which items it keeps; gear always stays.",
+  "author": "EveryDayEngineering",
+  "version": "1.0.0",
+  "compatibleClientVersions": ["0.6.0-beta", "0.6.1-beta"],
+  "kind": "feature",
+  "depends": ["Game"],
+  "leagues": "all",
+  "enabled": false
+}

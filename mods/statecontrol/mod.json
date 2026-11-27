@@ -1,0 +1,15 @@
+{
+  "id": "statecontrol",
+  "name": "State Control",
+  "description": "Chat commands for testing and practice: save and load characters and the stash (/save_character, /save_stash, /load_saves), empty, fill, add or remove stash tabs (/clear_stash, /fill_stash, /add_tab, /remove_tab) and make a level 100 character of every ascendancy (/make_characters).",
+  "author": "marshmellion",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta",
+    "0.6.1-beta"
+  ],
+  "kind": "feature",
+  "depends": [
+    "Game"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "lootweights",
+  "name": "Loot Weights",
+  "description": "Tune drop quantity, rarity, gold, maps, item kinds, map cards and scarabs, and single currencies, cards and scarabs.",
+  "author": "nestyy1337",
+  "version": "1.0.0",
+  "compatibleClientVersions": ["0.6.1-beta"],
+  "kind": "feature",
+  "depends": [],
+  "enabled": false
+}

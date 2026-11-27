@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LocalExile GM 工具</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 "Microsoft JhengHei","Microsoft YaHei",system-ui,sans-serif;background:#14161a;color:#d8d4c8}
+header{padding:14px 18px 6px;position:relative}
+h1{margin:0;font-size:20px}
+#counts{color:#8a8578;font-size:12px;margin-top:2px}
+#bar{position:sticky;top:0;z-index:2;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 18px;background:#14161aee;border-bottom:1px solid #2a2d33;backdrop-filter:blur(4px)}
+#q{flex:1;min-width:220px;padding:8px 12px;font-size:16px;background:#1e2127;color:#eee;border:1px solid #3a3e46;border-radius:6px;outline:none}
+#q:focus{border-color:#c9a55c}
+.rqty{width:54px;padding:4px 6px;font-size:13px;background:#1e2127;color:#eee;border:1px solid #3a3e46;border-radius:5px}
+.qchip{padding:2px 8px;border-radius:10px;border:1px solid #3a3e46;background:#1e2127;color:#b6b0a2;cursor:pointer;font-size:12px}
+.qchip:hover{border-color:#c9a55c;color:#fff}
+.chip{padding:4px 12px;border-radius:14px;border:1px solid #3a3e46;background:#1e2127;color:#b6b0a2;cursor:pointer;font-size:13px}
+.chip.on{background:#c9a55c;color:#1b1408;border-color:#c9a55c;font-weight:600}
+#list{padding:6px 18px 20px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:6px 8px;border-bottom:1px solid #22252b}
+.row:hover{background:#1b1e24}
+.names{min-width:0}
+.cn{font-size:16px}
+.cn .sub{color:#8a8578;font-size:12px;margin-left:8px}
+.en{color:#8a8578;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:3px;margin-right:6px;vertical-align:2px}
+.tag.area{background:#2c4a6e;color:#9cc4ee}.tag.mob{background:#5e2b2b;color:#ee9c9c}.tag.npc{background:#3f5e2f;color:#b6e29c}
+.tag.chest{background:#6e5a24;color:#eeD799}.tag.item{background:#4a3a6e;color:#c4a9ee}
+.btns{display:flex;gap:6px;flex:none}
+button{padding:5px 10px;font-size:13px;background:#2a2d33;color:#d8d4c8;border:1px solid #3a3e46;border-radius:5px;cursor:pointer;white-space:nowrap}
+button:hover{border-color:#c9a55c;color:#fff}
+button.ok{background:#3f5e2f;color:#dff0d0;border-color:#3f5e2f}
+button.send{background:#3f5e2f;color:#dff0d0;border-color:#3f5e2f;font-weight:600}
+button.send:hover{border-color:#c9a55c;color:#fff}
+button.send:disabled{opacity:.7;cursor:default}
+code{background:#22252b;padding:1px 5px;border-radius:3px;font-size:12px}
+#more{color:#8a8578;padding:8px}
+#help{margin:0 18px 30px;border:1px solid #2a2d33;border-radius:8px;padding:10px 14px}
+#help summary{cursor:pointer;font-weight:600;color:#c9a55c}
+#help td{padding:3px 10px 3px 0;vertical-align:top;font-size:13px}
+#foot{color:#666;font-size:11px;text-align:center;padding-bottom:20px}
+#run{padding:0 18px 6px}
+#quick{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px}
+#cmdbar{display:flex;gap:8px;align-items:center}
+#cmd{flex:1;min-width:200px;padding:8px 12px;font:14px Consolas,monospace;background:#1e2127;color:#eee;border:1px solid #3a3e46;border-radius:6px;outline:none}
+#cmd:focus{border-color:#c9a55c}
+#send{padding:8px 22px;font-size:15px;font-weight:600;background:#3f5e2f;color:#dff0d0;border:1px solid #3f5e2f;border-radius:6px;cursor:pointer;white-space:nowrap}
+#send:hover{border-color:#c9a55c;color:#fff}
+#status{font-size:12px;color:#8a8578;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#status.ok{color:#b6e29c}#status.err{color:#ee9c9c}
+#tppanel{padding:6px 18px 20px}
+.tphead{margin:4px 0 8px;color:#b6b0a2;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tpbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+#tpq{flex:1;min-width:200px;max-width:420px;padding:7px 12px;font-size:14px;background:#1e2127;color:#eee;border:1px solid #3a3e46;border-radius:6px;outline:none}
+#tpq:focus{border-color:#c9a55c}
+#tpmore{color:#8a8578;padding:8px}
+#fab{position:fixed;right:22px;bottom:22px;z-index:9;width:54px;height:54px;border-radius:50%;background:#c9a55c;color:#1b1408;
+  font-weight:700;font-size:19px;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;
+  box-shadow:0 2px 14px #000a;border:0}
+#fab:hover{filter:brightness(1.12)}
+#fpanel{position:fixed;right:22px;bottom:88px;z-index:9;width:350px;max-height:78vh;overflow:auto;display:none;
+  background:#1b1e24f2;border:1px solid #3a3e46;border-radius:10px;padding:12px 12px 6px;backdrop-filter:blur(4px);box-shadow:0 4px 22px #000c}
+#fpanel h2{margin:0 0 8px;font-size:15px;color:#c9a55c}
+.fpg{margin-bottom:10px}
+.fpg h3{margin:0 0 6px;font-size:12px;color:#8a8578;font-weight:600}
+.fpbtns{display:flex;flex-wrap:wrap;gap:6px}
+.fpbtns button{font-size:12px;padding:5px 10px}
+.fpbtns button[data-mode=fill]{border-style:dashed}
+.fpnote{color:#666;font-size:11px;margin:2px 0 8px}
+#langs{position:absolute;top:14px;right:18px;display:flex;gap:6px}
+.lchip{padding:2px 10px;border-radius:10px;border:1px solid #3a3e46;background:#1e2127;color:#b6b0a2;cursor:pointer;font-size:12px}
+.lchip.on{background:#c9a55c;color:#1b1408;border-color:#c9a55c;font-weight:600}
+</style></head><body>
+<header><h1><span data-i18n="title">LocalExile GM 工具</span></h1><div id="counts"></div>
+<div id="langs"><span class="lchip" data-lang="zh">中</span><span class="lchip" data-lang="en">EN</span></div></header>
+<div id="bar">
+  <input id="q" data-i18n-ph="searchPh" placeholder="中文（简/繁）或英文搜索…" autofocus>
+  <span id="chips"></span>
+</div>
+<div id="run">
+  <div id="quick"></div>
+  <div id="cmdbar">
+    <input id="cmd" data-i18n-ph="cmdPh" placeholder="点上面的按钮选命令…" autocomplete="off" spellcheck="false">
+    <button id="send" data-i18n="send">发送</button><span id="status"></span>
+  </div>
+</div>
+<div id="list"></div>
+<div id="tppanel" style="display:none">
+  <div class="tphead"><span id="tparea"></span><button id="tprefresh" data-i18n="refreshBtn">刷新</button></div>
+  <div class="tpbar"><input id="tpq" data-i18n-ph="tpqPh" placeholder="过滤当前区域目标…"><span id="tpchips"></span></div>
+  <div id="tlist"></div>
+  <div id="tpmore"></div>
+</div>
+<details id="help"><summary data-i18n="helpTitle">常用命令速查（点开）</summary><table id="helptbl"></table></details>
+<div id="fab" title="快捷操作">GM</div>
+<div id="fpanel">
+  <h2 data-i18n="fpTitle">快捷操作（一键生效）</h2>
+  <div id="fpgroups"></div>
+  <div class="fpnote" data-i18n="fpNote">直发模式点击即执行，结果看游戏内聊天；虚线按钮=填入命令栏补参数</div>
+</div>
+<div id="foot"></div>
+<script>
+// ———— i18n ————
+const I18N={"zh":{"title":"LocalExile GM 工具","trade":"交易行 »","searchPh":"搜索英文名：区域 /goto、怪物 /tp /spawn_mob、物品 /item…","cmdPh":"点上面的按钮选命令 →（可编辑）→ 回车或点发送，自动在游戏里生效…","send":"发送","copy":"复制","all":"全部","tpTab":"本图传送","town":" · 城镇","more":"共 {n} 条，只显示前 150 —— 输入更多关键字缩小范围","moreTp":"共 {n} 条，只显示前 300 —— 输入关键字缩小范围","noMatch":"没有匹配项","namesMissing":"名字表由服务器提供（GET /names）：请开服后用 http://127.0.0.1:6111/ 打开本页；命令栏不受影响。","copied":"已复制","pickFirst":"先点上面的按钮选一条命令","copiedFile":"已复制（直发需开服后用 http://127.0.0.1:6111/ 打开本页）","sending":"发送中…","nobody":"没有角色在游戏里，先登录","nobodyShort":"没有角色在游戏","sentOkShort":"已发送 ✓","sendFail":"发送失败：HTTP ","sentOk":"已发送 ✓（结果看游戏内聊天）","noServer":"连不上服务器（服务端开了吗？）","noServerShort":"连不上服务器","onlineYes":"在线：","onlineNo":"服务器已开，还没有角色进游戏","clickSend":"点击直接发送","clickCopy":"点击直接复制","sentPrefix":"已发送：","spawnL":"刷","spectreL":"灵体","tpL":"传送","enterBtn":"进入","enterTitle":"/goto 直接进入该区域","refreshBtn":"刷新","qtyHint":"数量 1-10","tpqPh":"过滤当前区域目标：中文名 / 英文名 / 坐标…","tpNeedServed":"本图传送需要直发模式：开服后用 http://127.0.0.1:6111/ 打开本页","loading":"加载中…","tpNobody":"没有角色在游戏里，登录后点「刷新」","curArea":"当前区域","seedL":"种子","meL":"我","truncated":"物件过多，只列前 800","kAll":"全部","kMonster":"怪物","kNpc":"NPC","kTransition":"出口","kWaypoint":"传送点","kArrival":"出生点","kObject":"物件","fpTitle":"快捷操作（一键生效）","fpNote":"直发模式点击即执行，结果看游戏内聊天；虚线按钮=填入命令栏补参数","fillNote":"已填入命令栏，补参数后回车发送","helpTitle":"常用命令速查（点开）","foot":"本页随 gm-web mod 附带 · 直发模式：开服后用 http://127.0.0.1:6111/ 打开"},"en":{"title":"LocalExile GM Tool","trade":"Trade »","searchPh":"Search EN names: areas /goto, monsters /tp /spawn_mob, items /item…","cmdPh":"Pick a command with the buttons above → (editable) → Enter or Send runs it in game…","send":"Send","copy":"Copy","all":"All","tpTab":"In-area TP","town":" · town","more":"{n} matches, showing the first 150 — type more to narrow down","moreTp":"{n} matches, showing the first 300 — type a keyword to narrow down","noMatch":"No matches","namesMissing":"The name tables come from the server (GET /names): open this page from a running server at http://127.0.0.1:6111/; the command bar keeps working.","copied":"Copied","pickFirst":"Pick a command button above first","copiedFile":"Copied (open this page from the server at http://127.0.0.1:6111/ to send directly)","sending":"Sending…","nobody":"Nobody is in game — log in first","nobodyShort":"nobody in game","sentOkShort":"Sent ✓","sendFail":"Send failed: HTTP ","sentOk":"Sent ✓ (see the in-game chat)","noServer":"Cannot reach the server — is it running?","noServerShort":"server unreachable","onlineYes":"Online: ","onlineNo":"Server is up, nobody has entered the game yet","clickSend":"click to send directly","clickCopy":"click to copy directly","sentPrefix":"sent: ","spawnL":"spawn","spectreL":"spectre","tpL":"TP","enterBtn":"Enter","enterTitle":"/goto straight into that area","refreshBtn":"Refresh","qtyHint":"qty 1-10","tpqPh":"Filter targets: CN name / EN name / coords…","tpNeedServed":"In-area TP needs the served page: open http://127.0.0.1:6111/ with the server running","loading":"Loading…","tpNobody":"Nobody is in game — log in, then Refresh","curArea":"Current area","seedL":"seed","meL":"me","truncated":"too many objects — first 800 shown","kAll":"All","kMonster":"Monster","kNpc":"NPC","kTransition":"Exit","kWaypoint":"Waypoint","kArrival":"Spawn","kObject":"Object","fpTitle":"Quick actions","fpNote":"Served mode: one click runs it, results in the in-game chat; dashed buttons fill the command bar for parameters","fillNote":"Filled into the command bar — add parameters, then press Enter","helpTitle":"Common commands (click to open)","foot":"this page ships with the gm-web mod · open it from the running server at http://127.0.0.1:6111/ · names via GET /names"}};
+const UP=true;
+const urlLang=new URLSearchParams(location.search).get('lang');
+let LANG=urlLang==='zh'||urlLang==='en'?urlLang:localStorage.getItem('lang')||((navigator.language||'zh').toLowerCase().startsWith('zh')?'zh':'en');
+const t=k=>(I18N[LANG]&&I18N[LANG][k])||I18N.zh[k]||k;
+const L=(a,b)=>LANG==='zh'?a:b;
+const SERVED=location.protocol==='http:';
+const LIST=document.getElementById('list'),Q=document.getElementById('q'),
+      CHIPS=document.getElementById('chips'),COUNTS=document.getElementById('counts'),
+      CMD=document.getElementById('cmd'),SEND=document.getElementById('send'),STATUS=document.getElementById('status');
+let type='all';
+const TYPES=[["area","区域","Areas"],["mob","怪物","Monsters"],["item","物品","Items"]];
+const tLabel=k=>{const x=TYPES.find(e=>e[0]===k);return x?L(x[1],x[2]):k};
+let D=null;
+const MOBCN={},NPCCN={},AREACN={},CHESTCN={};
+function buildIndexes(){
+  (D.mob||[]).forEach(e=>MOBCN[e[2]]=e);(D.npc||[]).forEach(e=>NPCCN[e[2]]=e);
+  (D.area||[]).forEach(e=>AREACN[e[3]]=e);(D.chest||[]).forEach(e=>CHESTCN[e[3]]=e);}
+function updateCounts(){COUNTS.textContent=D?TYPES.map(x=>tLabel(x[0])+' '+(D[x[0]]||[]).length).join(' · '):'';}
+function applyUI(){
+  document.title=t('title');document.documentElement.lang=LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>el.placeholder=t(el.dataset.i18nPh));
+  SEND.textContent=SERVED?t('send'):t('copy');
+  document.getElementById('fab').title=t('fpTitle');}
+document.getElementById('langs').onclick=e=>{const c=e.target.closest('.lchip');if(c)setLang(c.dataset.lang);};
+function setLang(l){if(l===LANG)return;LANG=l;localStorage.setItem('lang',l);
+  applyUI();renderChips();renderQuick();renderHelp();renderPanel();renderTpChips();updateCounts();render();}
+// ———— 数据表搜索 ————
+function renderChips(){
+  CHIPS.innerHTML=[['all',t('all')],['tp',t('tpTab')],...TYPES.map(x=>[x[0],tLabel(x[0])])]
+    .map(c=>`<span class="chip${c[0]===type?' on':''}" data-t="${c[0]}">${c[1]}</span>`).join('');}
+CHIPS.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;
+  CHIPS.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===c));
+  type=c.dataset.t;render();};
+function qtyCtl(vals){return '<input class="rqty" type="number" value="1" min="1" max="9999" title="'+t('qtyHint')+'">'+
+  vals.map(n=>`<span class="qchip" data-q="${n}">${n}</span>`).join('');}
+const snd=attr=>SERVED?`<button class="send" ${attr}>${t('send')}</button>`:'';
+function rowBtns(ty,e){
+  if(ty==='mob'){let h=`<button data-cmd="${esc('/tp '+e[2])}">/tp</button><button data-cmd="${esc('/spawn_mob '+e[2])}" title="/spawn_mob">${t('spawnL')}</button>`;
+    if(!UP)h+=qtyCtl([1,3,10])+`<button data-spectre="${esc(e[2])}" title="/spectres add · ${t('qtyHint')}">${t('spectreL')}</button>`+
+      snd(`data-spectre="${esc(e[2])}" title="/spectres add"`);
+    return h;}
+  if(ty==='area')return `<button data-cmd="${esc('/goto '+e[3])}">/goto</button>`+
+    snd(`data-cmd="${esc('/goto '+e[3])}" title="/goto"`);
+  if(ty==='npc')return `<button data-cmd="${esc('/tp '+e[2])}">/tp</button>`;
+  if(ty==='chest')return `<button data-cmd="${esc('/tp '+e[3])}">/tp</button>`;
+  const give=UP?'/item':'/give';
+  return qtyCtl([1,10,40,100])+`<button data-give="${esc(e[3])}">${give}</button>`+
+    snd(`data-give="${esc(e[3])}" title="${give}"`);
+}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function namesMissing(){if(type!=='tp')LIST.innerHTML='<div id="more">'+esc(t('namesMissing'))+'</div>';}
+function render(){
+  if(type==='tp'){LIST.style.display='none';TP.style.display='block';loadTp(false);return;}
+  LIST.style.display='';TP.style.display='none';
+  if(!D){namesMissing();return;}
+  const q=Q.value.trim(),ql=q.toLowerCase();
+  const m=e=>!ql||e[0].indexOf(q)>=0||e[1].indexOf(q)>=0||e[2].toLowerCase().indexOf(ql)>=0||e[3].toLowerCase().indexOf(ql)>=0;
+  let total=0,html='',shown=0;
+  for(const[ty]of TYPES){
+    if(type!=='all'&&type!==ty)continue;
+    for(const e of D[ty]||[]){
+      if(!m(e))continue;total++;
+      if(shown>=150)continue;shown++;
+      const sub=ty==='area'?' <span class="sub">'+e[3]+(e[4]?L(' · 城镇',' · town'):'')+'</span>':'';
+      const info=ty==='mob'?' · '+e[3].split('/').pop():(ty==='chest'?' · '+e[3]:(ty==='area'?'':(ty==='npc'?' · '+e[3].split('/').pop():'')));
+      const btns=rowBtns(ty,e);
+      html+=`<div class="row"><div class="names"><div class="cn"><span class="tag ${ty}">${tLabel(ty)}</span>${esc(e[0])}${sub}</div><div class="en">${esc(e[2])}${info}</div></div><div class="btns">${btns}</div></div>`;
+    }
+  }
+  LIST.innerHTML=html+(total>150?'<div id="more">'+t('more').replace('{n}',total)+'</div>':(total?'':'<div id="more">'+t('noMatch')+'</div>'));
+}
+LIST.onclick=e=>{
+  const c=e.target.closest('.qchip');
+  if(c){c.closest('.row').querySelector('.rqty').value=c.dataset.q;return;}
+  const b=e.target.closest('button');if(!b)return;
+  const n=Math.max(1,parseInt(b.closest('.row').querySelector('.rqty')?.value,10)||1);
+  let full=b.dataset.cmd;
+  if(b.dataset.give)full=(UP?'/item ':'/give ')+b.dataset.give+' '+n;
+  else if(b.dataset.spectre)full='/spectres add '+b.dataset.spectre+(n>1?' '+Math.min(n,10):'');
+  if(b.classList.contains('send')){runNow(full,b);return;}
+  CMD.value=full;
+  if(!SERVED)copy(full,b);else CMD.focus();};
+// ———— 命令栏 ————
+async function copy(text,btn){
+  try{await navigator.clipboard.writeText(text);}
+  catch(_){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}
+  const old=btn.textContent;btn.textContent=t('copied');btn.classList.add('ok');
+  setTimeout(()=>{btn.textContent=old;btn.classList.remove('ok');},900);
+}
+function status(msg,cls){STATUS.textContent=msg;STATUS.className=cls||'';}
+async function send(){
+  const cmd=CMD.value.trim();
+  if(!cmd){status(t('pickFirst'),'err');return;}
+  if(!SERVED){await copy(cmd,SEND);status(t('copiedFile'),'ok');return;}
+  status(t('sending'));
+  try{
+    const r=await fetch('/run',{method:'POST',body:cmd});
+    if(r.status===503){status(t('nobody'),'err');return;}
+    if(!r.ok){status(t('sendFail')+r.status,'err');return;}
+    status(t('sentOk'),'ok');
+  }catch(_){status(t('noServer'),'err');}
+}
+SEND.onclick=send;CMD.onkeydown=e=>{if(e.key==='Enter')send();};
+async function runNow(cmd,btn){
+  const old=btn.textContent;btn.textContent=t('sending');btn.disabled=true;
+  try{
+    const r=await fetch('/run',{method:'POST',body:cmd});
+    btn.textContent=r.status===503?t('nobodyShort'):r.ok?t('sentOkShort'):'HTTP '+r.status;
+    if(r.ok)status(t('sentPrefix')+cmd,'ok');
+  }catch(_){btn.textContent=t('noServerShort');status(t('noServer'),'err');}
+  setTimeout(()=>{btn.textContent=old;btn.disabled=false;},1200);
+}
+// ———— 常用命令 ————
+const QUICK=[["满血","Full heal","/heal"],["无敌","God mode","/god"],["杀身边怪","Kill near","/kill near"],["杀全图怪","Kill all","/kill all"],["杀Boss","Kill boss","/kill boss"],["充能","Charges","/charges"],["光环","Auras","/auras"],["抗性","Resistances","/resistances"],["全传送点","All waypoints","/waypoints all"],["本图怪物","Mobs in area","/mobs"],["本图目标","Targets in area","/tp list"],["位置","Where am I","/pos"]];
+function renderQuick(){
+  document.getElementById('quick').innerHTML=QUICK.map(q=>`<span class="chip" data-cmd="${esc(q[2])}" title="${esc(q[2])} · ${t(SERVED?'clickSend':'clickCopy')}">${esc(L(q[0],q[1]))}</span>`).join('');}
+document.getElementById('quick').onclick=e=>{const c=e.target.closest('.chip');if(!c)return;
+  CMD.value=c.dataset.cmd;
+  if(SERVED)runNow(c.dataset.cmd,c);else copy(c.dataset.cmd,c);};
+// ———— 本图传送面板：GET /tp（gm-web）返回 gm-commands /tp 的同一候选表，点击即发 ——
+const TP=document.getElementById('tppanel'),TQ=document.getElementById('tpq'),TLIST=document.getElementById('tlist'),
+      TAREA=document.getElementById('tparea'),TPCHIPS=document.getElementById('tpchips'),TPMORE=document.getElementById('tpmore');
+const KINDTAG={monster:'mob',npc:'npc',transition:'area',waypoint:'chest',arrival:'chest',object:'chest'};
+const KINDKEY={monster:'kMonster',npc:'kNpc',transition:'kTransition',waypoint:'kWaypoint',arrival:'kArrival',object:'kObject'};
+const kindLabel=k=>t(KINDKEY[k]||'kObject');
+function tpCn(x){
+  if(x.kind==='monster')return MOBCN[x.name.split('@')[0]]||null;   // 带 @等级 后缀的任务怪剥掉再查
+  if(x.kind==='npc')return NPCCN[x.name]||null;
+  if(x.kind==='transition'&&x.dest)return AREACN[x.dest]||null;
+  if(x.kind==='object')return CHESTCN[x.name]||null;
+  return null;}
+let tpData=null,tpKind='all';
+function renderTpChips(){
+  TPCHIPS.innerHTML=[['all','kAll'],['monster','kMonster'],['npc','kNpc'],['transition','kTransition'],['waypoint','kWaypoint'],['object','kObject']]
+    .map(c=>`<span class="chip${c[0]===tpKind?' on':''}" data-k="${c[0]}">${t(c[1])}</span>`).join('');}
+TPCHIPS.onclick=e=>{const c=e.target.closest('.chip');if(!c)return;
+  TPCHIPS.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===c));
+  tpKind=c.dataset.k;renderTp();};
+async function loadTp(force){
+  if(!SERVED){TAREA.textContent=t('tpNeedServed');TLIST.innerHTML='';TPMORE.textContent='';return;}
+  if(tpData&&!force)return;
+  TAREA.textContent=t('loading');
+  try{
+    const r=await fetch('/tp');
+    tpData=r.status===503?{online:false,targets:[]}:await r.json();
+  }catch(_){tpData={online:false,targets:[]};}
+  renderTp();}
+function renderTp(){
+  if(!tpData)return;
+  if(!tpData.online){TAREA.textContent=t('tpNobody');TLIST.innerHTML='';TPMORE.textContent='';return;}
+  const a=tpData.area,acn=a&&AREACN[a.id];
+  TAREA.innerHTML=`${t('curArea')} <b style="color:#c9a55c">${esc(acn?acn[0]:a.name||a.id)}</b> ${esc(a.name&&a.name!==a.id&&!acn?a.name+' · ':'')}${esc(a.id)} · ${t('seedL')} ${a.seed} · ${t('meL')} (${tpData.playerX}, ${tpData.playerY})${tpData.truncated?' · '+t('truncated'):''}`;
+  const seen={};
+  tpData.targets.forEach(x=>{const k=x.name.toLowerCase();seen[k]=(seen[k]||0)+1;x.n=seen[k];});
+  const q=TQ.value.trim().toLowerCase();
+  let total=0,shown=0,html='';
+  for(const tg of tpData.targets){
+    if(tpKind!=='all'&&tg.kind!==tpKind&&!(tpKind==='waypoint'&&tg.kind==='arrival'))continue;
+    const cn=tpCn(tg);
+    const hay=(tg.name+' '+(cn?cn[0]+' '+cn[1]+' '+cn[2]+' ':'')+(tg.destEn||'')+' '+(tg.dest||'')+' '+tg.kind).toLowerCase();
+    if(q&&!hay.includes(q))continue;
+    total++;if(shown>=300)continue;shown++;
+    const tpCmd=tg.id!=null?'/tp 0x'+tg.id.toString(16):'/tp '+tg.name+(tg.n>1?' '+tg.n:'');
+    const go=tg.kind==='transition'&&tg.dest&&!tg.dest.startsWith('0x')&&tg.dest!==tpData.area.id?`<button data-goto="${esc(tg.dest)}" title="${esc(t('enterTitle'))}">${t('enterBtn')}</button>`:'';
+    const sub=tg.kind==='transition'&&cn?`${esc(cn[2])} · ${esc(tg.name)}`:esc(tg.name);
+    html+=`<div class="row"><div class="names"><div class="cn"><span class="tag ${KINDTAG[tg.kind]}">${kindLabel(tg.kind)}</span>${esc(cn?cn[0]:tg.name)}${tg.n>1?' <span class="sub">#'+tg.n+'</span>':''}</div><div class="en">${sub} · (${tg.x}, ${tg.y})</div></div><div class="btns">${go}<button class="send" data-tcmd="${esc(tpCmd)}">${t('tpL')}</button></div></div>`;}
+  TLIST.innerHTML=html;
+  TPMORE.textContent=total>300?t('moreTp').replace('{n}',total):(total?'':t('noMatch'));}
+TLIST.onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.goto){runNow('/goto '+b.dataset.goto,b);return;}
+  if(b.dataset.tcmd)runNow(b.dataset.tcmd,b);};
+document.getElementById('tprefresh').onclick=()=>loadTp(true);
+TQ.oninput=()=>renderTp();
+// ———— 右侧悬浮快捷面板：一键直发（虚线按钮=填入命令栏补参数） ——
+const PANEL=[["升华 / 迷宫","Ascendancy / Labyrinth",[["补满升华点数（全部迷宫）","Fill ascendancy points (all labs)","/ascendancy_points all"],["开全部帝王试炼","Unlock all trials","/trials on"],["重置升华点","Reset ascendancy points","/reset_ascendancy"],["今日迷宫布局（看聊天）","Today's lab layout (in chat)","/lab_layout"],["选择升华职业（列表看聊天）","Choose ascendancy class (list in chat)","/ascendancy","fill"]]],["手持物品（先在游戏里拿在手上）","Held item (hold it in game first)",[["查看词缀","View mods","/item_mods"],["满roll（隐式显式全上限）","Max roll (every value at its top)","/item_max"],["重掷为稀有（新词缀新名字）","Reroll as rare (new mods/name)","/roll rare"],["重掷为魔法","Reroll as magic","/roll magic"],["变稀有","Make rare","/rarity rare"],["变传奇","Make unique","/rarity unique"],["六连全白孔","6 linked white sockets","/sockets WWWWWW"],["改孔色（如 RRGBBB）","Recolor (e.g. RRGBBB)","/sockets ","fill"],["标记腐化","Mark corrupted","/corrupt"],["护甲基础roll（0-31）","Base defence roll (0-31)","/base_defence ","fill"]]],["造物","Crafting",[["造宝石（名 等级 品质）","Craft gem (name lvl qual)","/gem Fireball 20 20","fill"],["背包宝石推到升级边缘","Push backpack gems to level edge","/gem_xp near"],["传奇珠宝清单","Unique jewel list","/unique_jewel list"],["造满roll传奇（如 Mageblood）","Max-roll unique (e.g. Mageblood)","/item Mageblood max","fill"],["刷NPC（改名字）","Spawn NPC (edit name)","/npc ","fill"]]],["角色","Character",[["满血复活","Full heal","/heal"],["+5 天赋点","+5 passive points","/add_passive_points 5"],["+5 重置点","+5 refund points","/add_refund_points 5"],["重置全部天赋","Reset all passives","/reset_passives"],["直接满级","Set level 100","/set_level 100"],["金币 +1万","+10k gold","/gold 10000"],["异界点数 100","100 atlas points","/atlas_points 100"],["激活全传送点","All waypoints","/waypoints all"]]],["战斗 / 本图","Combat / this area",[["杀附近怪（正常掉落）","Kill near (normal drops)","/kill near"],["杀全图怪","Kill all","/kill all"],["杀本图 Boss","Kill area boss","/kill boss"],["本图怪物","Mobs","/mobs"],["本图NPC","NPCs","/npcs"],["本图目标","Targets","/tp list"],["删最后刷的怪","Despawn last","/despawn"],["删全部怪","Despawn all","/despawn all"],["怪物AI 开/关","Monster AI on/off","/ai ","fill"]]],["面板状态查询（只读）","Stats (read-only)",[["抗性","Resistances","/resistances"],["防御","Defences","/defences"],["暴击","Crit","/crit"],["格挡","Block","/block"],["法术压制","Suppression","/suppression"],["命中","Accuracy","/accuracy"],["充能","Charges","/charges"],["光环","Auras","/auras"]]],["体验（本图生效，off 恢复）","QoL (this area only, off restores)",[["移速 ×1.5","Speed ×1.5","/set_speed 150"],["移速 ×2.5","Speed ×2.5","/set_speed 250"],["移速 ×5","Speed ×5","/set_speed 500"],["移速恢复","Speed reset","/set_speed off"],["范围 ×1.5","AoE ×1.5","/set_aoe 150"],["范围恢复","AoE reset","/set_aoe off"]]]];
+const FAB=document.getElementById('fab'),FP=document.getElementById('fpanel');
+function renderPanel(){
+  document.getElementById('fpgroups').innerHTML=PANEL.map(([gz,ge,btns])=>
+  `<div class="fpg"><h3>${esc(L(gz,ge))}</h3><div class="fpbtns">${btns.map(b=>
+    `<button data-cmd="${esc(b[2])}" data-mode="${b[3]||'send'}" title="${esc(b[2])}">${esc(L(b[0],b[1]))}</button>`).join('')}</div></div>`).join('');}
+FAB.onclick=()=>{const on=FP.style.display!=='none';FP.style.display=on?'none':'block';FAB.textContent=on?'GM':'×';};
+document.addEventListener('click',e=>{
+  if(FP.style.display==='none')return;
+  if(e.target.closest('#fpanel')||e.target.closest('#fab'))return;
+  FP.style.display='none';FAB.textContent='GM';});
+document.getElementById('fpgroups').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.mode==='fill'){CMD.value=b.dataset.cmd;CMD.focus();status(t('fillNote'),'ok');return;}
+  if(SERVED)runNow(b.dataset.cmd,b);else copy(b.dataset.cmd,b);};
+// ———— 速查表 ————
+const HELP=[["<code>/goto &lt;area id or name&gt; [seed]<\/code>","跨图传送（本页「区域」类直达；带种子开新副本）","Cross-area teleport (the page’s Areas tab jumps straight there; a seed opens a fresh instance)"],["<code>/tp &lt;x y | +dx +dy | id | name [n] | list [filter]&gt;<\/code>","图内传送：<b>本页「本图传送」面板<\/b>列出当前区域全部目标（怪物/NPC/出口/传送点/物件，含 Boss）点击直达；游戏内 <code>/tp list<\/code> 也可列","In-area teleport: the <b>In-area TP panel<\/b> lists every target of the current area (monsters/NPCs/exits/waypoints/objects, bosses included) — one click jumps; in-game <code>/tp list<\/code> lists too"],["<code>/spawn_mob &lt;名&gt;[@等级] [friendly] [normal|magic|rare|unique] [自定义名]<\/code>","身边刷一只怪（friendly=友方；等级写在 @ 后）","Spawns one mob beside you (friendly = on your team; the level goes after @)"],["<code>/item &lt;名&gt; [数量] [magic|rare] [max]<\/code>","发物品；本页「物品」按钮直接发英文名+数量；max=满roll","Gives an item; the page’s Items tab sends the English name + count; max = as well rolled as it can be"],["<code>/gem &lt;名&gt; [等级] [品质]<\/code>","造宝石到指定等级品质","A gem into the inventory at that level and quality"],["<code>/gem_xp &lt;数量|near&gt;<\/code>","背包+已插宝石的经验；near=差一点到下一级","Experience for every backpack and socketed gem; near = one below the next level"],["<code>/item_mods<\/code> · <code>/item_max<\/code> · <code>/roll &lt;magic|rare&gt;<\/code> · <code>/rarity<\/code> · <code>/sockets<\/code> · <code>/item_state<\/code>","手持物品工艺（先在游戏里拿在手上）","Held-item crafting (hold the item in game first)"],["<code>/unique_jewel &lt;名&gt; | list<\/code>","全局传奇珠宝（满roll）","A global unique jewel, max-rolled"],["<code>/set_level &lt;1-100&gt;<\/code> · <code>/add_xp<\/code> · <code>/gold &lt;数&gt;<\/code> · <code>/add_passive_points &lt;n&gt;<\/code> · <code>/reset_passives<\/code>","角色调整","Character adjustments"],["<code>/ascendancy [名]<\/code> · <code>/ascendancy_points &lt;normal|cruel|merciless|eternal|all&gt;<\/code> · <code>/reset_ascendancy<\/code> · <code>/trials [on|off]<\/code> · <code>/lab_layout<\/code>","升华/迷宫","Ascendancy and the Labyrinth"],["<code>/waypoints [all|reset]<\/code> · <code>/atlas_points [n]<\/code> · <code>/quest_preset &lt;id&gt;<\/code>","传送点/异界点数/任务预设","Waypoints, Atlas points, quest presets"],["<code>/kill &lt;id | 名 [n] | boss | near [半径] | all&gt;<\/code>","按正常死亡路径杀怪（经验/掉落/任务进度都有）","Kills monsters through the normal death path (experience, drops, quest progress)"],["<code>/mobs<\/code> · <code>/npcs<\/code> · <code>/despawn [all|id]<\/code> · <code>/ai [on|off]<\/code>","本图怪物/NPC 管理","Area monster and NPC management"],["<code>/god [on|off|immune]<\/code> · <code>/heal<\/code> · <code>/charges<\/code> · <code>/auras [off &lt;名&gt;]<\/code>","战斗状态","Combat state"],["<code>/resistances<\/code> · <code>/defences<\/code> · <code>/crit<\/code> · <code>/block<\/code> · <code>/suppression<\/code> · <code>/accuracy<\/code>","面板查询（只读）","Stat queries (read-only)"],["<code>/set_speed &lt;百分比&gt;|off<\/code> · <code>/set_aoe &lt;百分比&gt;|off<\/code>","本图移速/范围加成（off 恢复）","This-area movement speed and area of effect (off restores)"]];
+function renderHelp(){
+  document.getElementById('helptbl').innerHTML=HELP.map(r=>`<tr><td>${r[0]}</td><td>${L(r[1],r[2])}</td></tr>`).join('');}
+// ———— 初始化 ————
+Q.oninput=render;
+applyUI();renderChips();renderQuick();renderHelp();renderPanel();renderTpChips();updateCounts();
+if(D)buildIndexes();
+else if(SERVED)fetch('/names').then(r=>r.ok?r.json():null).then(j=>{
+  if(j&&(j.area||j.mob||j.npc||j.chest||j.item)){D=j;buildIndexes();updateCounts();render();}
+  else namesMissing();}).catch(namesMissing);
+else namesMissing();
+render();
+if(SERVED)fetch('/online').then(r=>r.text()).then(n=>status(n?t('onlineYes')+n:t('onlineNo'),''))
+  .catch(()=>status(t('noServer'),'err'));
+document.getElementById('foot').textContent=t('foot');
+</script></body></html>

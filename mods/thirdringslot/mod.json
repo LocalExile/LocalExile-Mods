@@ -1,0 +1,14 @@
+{
+  "id": "thirdringslot",
+  "name": "Third Ring Slot",
+  "description": "Gives every character the third ring slot, the stat The Unseen Hand ascendancy passive grants.",
+  "author": "Qblolz",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta",
+    "0.6.1-beta"
+  ],
+  "kind": "feature",
+  "depends": [],
+  "enabled": true
+}

@@ -3,7 +3,7 @@
   "name": "Survivors",
   "description": "The Survivors league: survive the horde; skills cast themselves, and each run level offers an upgrade.",
   "author": "GafGafGaf5612",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "compatibleClientVersions": [
     "0.6.1-beta"
   ],

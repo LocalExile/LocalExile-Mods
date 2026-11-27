@@ -45,13 +45,16 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [liveeconomy](mods/liveeconomy/) | Faustus's Currency Exchange as a live market, at the official Path of Exile leagues' prices |
 | [fastcampaign](mods/fastcampaign/) | a faster campaign: 5× kill experience, +50% movement speed, `/fast` lists the commands that skip ahead |
 | [gm-commands](mods/gm-commands/) | the development and testing chat commands: teleport, items, monsters, experience, test hits, protocol probes |
+| [gm-web](mods/gm-web/) | gm-commands as a browser page at http://127.0.0.1:6111/ (loopback only): pick a command, it runs in game |
 | [globalchat](mods/globalchat/) | talk to other LocalExile players through the LocalExile global chat server |
 | [waypoint-tools](mods/waypoint-tools/) | lets Waypoint's tools reach the game without the client control bridge: the item crafter gives its items through it |
+| [equipmentfusion](mods/equipmentfusion/) | automatic attributes and defences from non-weapon native skin transfers; donor gems and skills excluded |
 | [backpack](mods/backpack/) | an optional native 20-slot extra backpack for every class, with safe recovery after disable |
 | [petloot](mods/petloot/) | optional pet pickup with per-character filters, minimum stacks, pause/resume and configurable 2x pet speed |
 | [zoom](mods/zoom/) | a wider view in normal play: the camera stands further back, the mouse wheel reaches it, `/zoom` sets how far |
 | [itemquantity](mods/itemquantity/) | 10× as many item drops |
 | [currencyloot](mods/currencyloot/) | Configurable bonus currency per eligible kill |
+| [lootweights](mods/lootweights/) | Drop quantity, rarity, gold, maps, item kinds, map cards and scarabs, and single currencies, cards and scarabs |
 | [mapdrop](mods/mapdrop/) | Configurable bonus map rolls for eligible kills |
 | [pob](mods/pob/) | preview and import character builds through an external converter; requires LocalExile #639 |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
@@ -62,6 +65,10 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [playerbots](mods/playerbots/) | server-driven characters that play the campaign, visit the towns and join a party; a league's mod |
 | [survivors](mods/survivors/) | the Survivors league: survive the horde, skills cast themselves, an upgrade each run level; a league's mod |
 | [excitingitems](mods/excitingitems/) | rare drop surprises: unique modifiers as extra implicits, empowered modifiers and a fractured extra modifier, all configurable |
+| [deposit](mods/deposit/) | `/deposit` at your stash sends currency, fragments, cards, essences, gems and flasks to their special tabs in one go, with a keep list |
+| [currencyaura](mods/currencyaura/) | auto-loots currency near you like gold, with optional divination cards and scarabs, an adjustable radius and a never-pick-up list |
+| [thirdringslot](mods/thirdringslot/) | the third ring slot for every character, the stat The Unseen Hand grants, without the ascendancy |
+| [statecontrol](mods/statecontrol/) | testing and practice tools: save and load characters and the stash, fill, add and remove stash tabs, make level 100 characters; requires LocalExile #1170 and #1172 |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to

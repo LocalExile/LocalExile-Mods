@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "settings": {
+    "keep": {
+      "type": "list",
+      "default": ["Portal Scroll", "Scroll of Wisdom"],
+      "label": "Items to keep",
+      "description": "Exact item names (or metadata ids) /deposit leaves in your inventory. /deposit keep add|remove <item> edits it in game.",
+      "item": { "type": "text" }
+    },
+    "tabs": {
+      "type": "choices",
+      "default": ["currency", "fragments", "cards", "essences", "gems", "flasks", "league"],
+      "label": "Tabs to fill",
+      "description": "Which special stash tabs /deposit sends items to. Items for a tab left out stay in your inventory.",
+      "options": [
+        { "value": "currency", "label": "Currency" },
+        { "value": "fragments", "label": "Fragments (incl. scarabs)" },
+        { "value": "cards", "label": "Divination cards" },
+        { "value": "essences", "label": "Essences" },
+        { "value": "gems", "label": "Gems" },
+        { "value": "flasks", "label": "Flasks" },
+        { "value": "league", "label": "League tabs (Delve, Blight, Delirium, Ultimatum)" }
+      ]
+    }
+  }
+}

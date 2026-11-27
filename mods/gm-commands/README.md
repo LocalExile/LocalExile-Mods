@@ -11,7 +11,7 @@ whenever the Game module does.
 | Group | Commands |
 |---|---|
 | Movement | `/tp`, `/goto`, `/tour` (with `live.ps1 -Walkmaps`), `/pos` |
-| Monsters and NPCs | `/spawn_mob`, `/mobs`, `/despawn`, `/kill`, `/mob_mods`, `/mob_tp`, `/mob_move`, `/mob_walk`, `/anim`, `/ai`, `/statue`, `/npc`, `/npcs`, `/npc_place`, `/npc_face` |
+| Monsters and NPCs | `/spawn_mob`, `/mobs`, `/despawn`, `/kill`, `/mob_mods`, `/mob_tp`, `/mob_move`, `/mob_walk`, `/entity`, `/anim`, `/ai`, `/statue`, `/npc`, `/npcs`, `/npc_place`, `/npc_face` |
 | Items | `/item`, `/item_give` (Waypoint's item crafter), `/item_tab`, `/gem`, `/gem_xp`, `/adorned`, `/unique_jewel`, `/radius_jewel`, `/impossible_escape`, `/timeless`, `/voices`, `/cluster_jewel`, `/corrupt`, `/item_mod`, `/item_max`, `/item_mods`, `/roll`, `/base_defence`, `/item_state`, `/rarity`, `/sockets` |
 | Character | `/set_level`, `/add_xp`, `/gold`, `/add_passive_points`, `/add_refund_points`, `/add_passive`, `/reset_passives`, `/ascendancy`, `/descendancy`, `/ascendancy_points`, `/reset_ascendancy`, `/atlas_points`, `/waypoints`, `/quest_flag`, `/league_flag`, `/trials`, `/quest_preset` |
 | Stats | `/stat`, `/set_stat`, `/set_speed`, `/set_aoe`, `/god`, `/charges`, `/auras`, `/resistances`, `/crit`, `/block`, `/accuracy`, `/defences`, `/suppression` |
@@ -20,6 +20,13 @@ whenever the Game module does.
 | Trials of Ascendancy tuning | `/trial_spike_hit`, `/trial_spike_step`, `/trial_spike_anim`, `/trial_roomba_damage`, `/trial_saw_damage`, `/trial_dart_poison`, `/trial_lava` |
 | Protocol | `/raw`, `/ui` |
 | Campaign driver | `/state`, `/kill`, `/quest_preset` (LocalExile's `scripts/dev/campaign/`) |
+
+**Entity drills.** `/entity [id] <verb>` runs one thing on any monster. `skills` names the actor's own skills by the
+GrantedEffects Id the client shows, `skill <name>` plays one of them as its clip only (the server owes no hit),
+`skill 0x1a2b` sends the raw 0x1ab clip, `kill` kills it through the normal death path (experience, drops and quest
+progress, a boss's stage skipped), `life <pct>` moves its life, `anim <index> [speed]` plays an animation and `list`
+shows what is near, nearest first. Without an id the nearest living monster is used, and the reply names it; the id
+(hex) may lead or trail the verb. `/ai off` first keeps a scripted fight from playing on its own.
 
 **Top rolls.** `/item <name> max` gives the item as well rolled as it can be (`/item Mageblood max`,
 `/item Vaal Regalia rare max`), and `/item_max` does the same to the item on the cursor. Every implicit and explicit
@@ -46,7 +53,7 @@ item crafter send these commands: install this mod for them.
 
 `/item_tab` fills (slotted, Flask and Gem tabs) refresh unloaded inventories before publishing their changes, including tabs kept in the client cache. Existing items are preserved; quantities are added only once.
 
-Works with: 1.6.1 requires LocalExile v0.6.1-beta (`AscendancyFamilies`, LocalExile/LocalExile#1578). 1.6.0 requires LocalExile v0.6.0-beta (`Player`, `GameArea`, `AreaStatBuffs`, LocalExile/LocalExile#1040).
+Works with: 1.7.0 requires LocalExile v0.6.1-beta (`MonsterActions` for `/entity`, LocalExile/LocalExile#1354). 1.6.1 requires LocalExile v0.6.1-beta (`AscendancyFamilies`, LocalExile/LocalExile#1578). 1.6.0 requires LocalExile v0.6.0-beta (`Player`, `GameArea`, `AreaStatBuffs`, LocalExile/LocalExile#1040).
 1.5.0, 1.4.1 and 1.4.0 need LocalExile v0.5.2-beta (from 1.4.1 `/god` and `/set_aoe` relight a
 burning Righteous Fire through its `RelightRighteousFire`, LocalExile/LocalExile#1070; `/cluster_jewel` uses its
 `ClusterJewels`, LocalExile/LocalExile#948). 1.3.0 needs LocalExile v0.5.1-beta (`/stash_add` uses LocalExile/LocalExile#891, and the server's monster calls

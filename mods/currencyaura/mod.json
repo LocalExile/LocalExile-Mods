@@ -1,0 +1,12 @@
+{
+  "id": "currencyaura",
+  "name": "Currency Aura",
+  "description": "Auto-loots currency near you while you play, like gold: orbs, scrolls, essences, fossils, oils, splinters, and optionally divination cards and scarabs. Adjustable radius and a never-pick-up list; gear, flasks and gems always stay.",
+  "author": "EveryDayEngineering",
+  "version": "1.0.0",
+  "compatibleClientVersions": ["0.6.0-beta", "0.6.1-beta"],
+  "kind": "feature",
+  "depends": ["Game"],
+  "leagues": "all",
+  "enabled": false
+}
