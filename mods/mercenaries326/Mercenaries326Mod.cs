@@ -63,7 +63,15 @@ public sealed class Mercenaries326Mod : IMod, IDisposable
         bool EnableLegendaryArmsDamageBonus = true,
         bool EnableLuminarySmallNodes = true);
 
-    readonly record struct AreaMeta(int Act, int AreaLevel, bool IsTown, bool IsHideout);
+    readonly record struct AreaMeta(
+        int Act,
+        int AreaLevel,
+        bool IsTown,
+        bool IsHideout,
+        bool IsLabyrinth,
+        bool IsVaalArea,
+        bool IsPvp,
+        bool HasCampaignLeagueChance);
 
     sealed class RosterSnapshot
     {
@@ -242,31 +250,55 @@ public sealed class Mercenaries326Mod : IMod, IDisposable
         if (string.IsNullOrEmpty(areaId) || AlwaysExcludedAreas.Contains(areaId))
             return false;
 
-        if (_areas.TryGetValue(areaId, out var meta) && (meta.IsTown || meta.IsHideout))
+        if (areaId.Contains("Labyrinth", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (!_areas.TryGetValue(areaId, out var meta))
+            return false;
+
+        if (meta.IsTown || meta.IsHideout || meta.IsLabyrinth || meta.IsVaalArea || meta.IsPvp)
             return false;
 
         if (Game.MapDevices.IsMapArea(player.Layout.Hash))
             return true;
 
+        // Match LocalExile's WorldAreaLeagueChances gating for Act 3+ (excludes labyrinth rooms, side areas, arenas,
+        // and non-encounter zones) while allowing Act 1-2 campaign zones from Mud Flats onward for 3.26 parity.
+        if (meta.Act >= 3)
+            return LeagueChances.Current.ChanceOf(areaId, LeagueChances.Mercenaries, alternate: false).Chance > 0;
+
+        if (!meta.HasCampaignLeagueChance || !IsAct1Or2CampaignArea(areaId))
+            return false;
+
         // Entering The Mud Flats (1_1_3) or any zone beyond The Coast/Tidal Island unlocks all-zone spawning immediately.
         if (IsMudFlatsOrBeyond(areaId))
             return true;
 
-        // Backtracking into The Coast (1_1_2), The Tidal Island (1_1_2a), or Act 1 side areas is allowed once Mud Flats+ was reached.
+        // Backtracking into The Coast (1_1_2) or The Tidal Island (1_1_2a) is allowed once Mud Flats+ was reached.
         return HasCharacterReachedMudFlats(player);
     }
+
+    static bool IsAct1Or2CampaignArea(string areaId) =>
+        areaId.StartsWith("1_1_", StringComparison.OrdinalIgnoreCase)
+        || areaId.StartsWith("1_2_", StringComparison.OrdinalIgnoreCase);
 
     bool IsMudFlatsOrBeyond(string areaId)
     {
         if (AlwaysExcludedAreas.Contains(areaId) || PreMudFlatsAreas.Contains(areaId))
             return false;
+        if (areaId.Contains("Labyrinth", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (string.Equals(areaId, "1_1_3", StringComparison.OrdinalIgnoreCase))
             return true;
         if (!_areas.TryGetValue(areaId, out var meta))
             return false;
-        if (meta.IsTown || meta.IsHideout)
+        if (meta.IsTown || meta.IsHideout || meta.IsLabyrinth || meta.IsVaalArea || meta.IsPvp)
             return false;
-        if (meta.Act >= 2)
+        if (meta.Act >= 3)
+            return LeagueChances.Current.ChanceOf(areaId, LeagueChances.Mercenaries, alternate: false).Chance > 0;
+        if (!meta.HasCampaignLeagueChance || !IsAct1Or2CampaignArea(areaId))
+            return false;
+        if (meta.Act == 2)
             return true;
         // Act 1 combat areas from Mud Flats (level 4) onward, excluding Twilight Strand / Coast / Tidal Island.
         return meta.Act == 1 && meta.AreaLevel >= 4;
@@ -451,13 +483,15 @@ public sealed class Mercenaries326Mod : IMod, IDisposable
                 return;
             }
 
+            uint[] mercRemoved = placed.Displaced is { } swapped ? [swapped.Id]
+                : placed.DestroyedId is uint destroyed ? [destroyed] : [];
             await Program.Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(mercRow), items.NextRevision(mercRow),
-                placed.Displaced is { } swapped ? [swapped.Id] : [], [placed.Placed]),
-                $"0x0041 merc326 equip body armour into row {mercRow}");
+                mercRemoved, [placed.Placed]),
+                $"0x00bf merc326 equip body armour into row {mercRow}");
             await Program.Send(player, InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.Cursor),
                 items.NextRevision(PlayerInventories.Cursor), [held.Id],
                 placed.Displaced is { } outItem ? [outItem with { X = 0, Y = 0 }] : []),
-                "0x0041 merc326 cursor after body armour equip");
+                "0x00bf merc326 cursor after body armour equip");
             await GameEvents.RunInventoryChanged(player, mercRow);
             await player.Commands!.Reply($"Equipped Unique Body Armour onto permanent mercenary slot {key + 1}.");
             return;
@@ -510,15 +544,38 @@ public sealed class Mercenaries326Mod : IMod, IDisposable
 
     static Dictionary<string, AreaMeta> LoadAreas()
     {
+        var excludedChanceRows = new HashSet<int>();
+        foreach (var lc in ClientTables.TableOrEmpty("WorldAreaLeagueChances"))
+        {
+            string? lcId = lc.TextOrNull("Id");
+            if (string.IsNullOrEmpty(lcId)
+                || string.Equals(lcId, "None", StringComparison.OrdinalIgnoreCase)
+                || lcId.StartsWith("Labyrinth", StringComparison.OrdinalIgnoreCase)
+                || lcId.StartsWith("SideArea", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(lcId, "Descent", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(lcId, "MapEndlessLedge", StringComparison.OrdinalIgnoreCase))
+            {
+                excludedChanceRows.Add(lc.Index);
+            }
+        }
+
         var map = new Dictionary<string, AreaMeta>(StringComparer.OrdinalIgnoreCase);
         foreach (var r in ClientTables.TableOrEmpty("WorldAreas"))
         {
             if (r.TextOrNull("Id") is not { Length: > 0 } id) continue;
+            int? lcRow = r.IntOrNull("LeagueChance1");
+            bool isLab = r.IntOrNull("IsLabyrinthArea") is > 0
+                || r.IntOrNull("IsLabyrinthAirlock") is > 0
+                || r.IntOrNull("IsLabyrinthBossArea") is > 0;
             map[id] = new AreaMeta(
                 Act: r.IntOrNull("Act") ?? 0,
                 AreaLevel: r.IntOrNull("AreaLevel") ?? 1,
                 IsTown: r.IntOrNull("IsTown") is > 0,
-                IsHideout: r.IntOrNull("IsHideout") is > 0);
+                IsHideout: r.IntOrNull("IsHideout") is > 0,
+                IsLabyrinth: isLab,
+                IsVaalArea: r.IntOrNull("IsVaalArea") is > 0,
+                IsPvp: r.IntOrNull("PVPType") is > 0,
+                HasCampaignLeagueChance: lcRow is int row && row > 0 && !excludedChanceRows.Contains(row));
         }
         return map;
     }
