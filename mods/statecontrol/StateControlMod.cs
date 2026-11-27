@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
-using System.Net.Sockets;
 using System.Text.Json;
 using GameServer.Core.Accounts;
 using GameServer.Core.Protocol.Instance;
-using GameServer.Core.Protocol.Login;
 using GameServer.Modding;
 using GameServer.Storage;
 
@@ -18,7 +16,7 @@ using GameServer.Storage;
 public sealed class StateControlMod : IMod
 {
     sealed record Choices(int FillAmount, int QuestPassivePoints);
-    sealed record CharacterState(Character Record, CharacterSaves.Save Save, DateTimeOffset At);
+    sealed record CharacterState(GameServer.Core.Accounts.Character Record, CharacterSaves.Save Save, DateTimeOffset At);
     sealed record StashState(AccountStash.Save Header, Dictionary<int, List<CharacterSaves.SavedPlacement>> Tabs, DateTimeOffset At);
 
     const string CharacterKey = "mod/statecontrol/character/", StashKey = "mod/statecontrol/stash/", UndoKey = "mod/statecontrol/stash-undo/";
@@ -41,7 +39,7 @@ public sealed class StateControlMod : IMod
         _log = mod.Log;
         GameEvents.CharacterAtRest.Add(id, conn =>
         {
-            if (conn.CharacterId is not { } character || !_pending.TryRemove(character, out var pending)) return Task.CompletedTask;
+            if (conn.Character.Id is not { } character || !_pending.TryRemove(character, out var pending)) return Task.CompletedTask;
             var state = pending.State;
             if (DateTimeOffset.UtcNow - pending.Asked > PendingFor) _log($"{state.Record.Name}: state of {state.At:u} not loaded: /load_saves was {pending.Asked:u}, before its last save");
             else _log(Restore(state) is { } why ? $"{state.Record.Name}: not loaded at rest: {why}" : $"{state.Record.Name}: state of {state.At:u} loaded");
@@ -50,10 +48,10 @@ public sealed class StateControlMod : IMod
         GameEvents.CommandsBuilding.Add(id, AddCommands);
     }
 
-    ChatCommands AddCommands(ChatCommands commands, string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn) => commands
+    ChatCommands AddCommands(ChatCommands commands, Player conn) => commands
         .Add("save_character", "/save_character (State Control: keep this character as it is now: level, passives, items, quests)", async _ =>
         {
-            if (conn.CharacterId is not { } id || Accounts.GetCharacter(id) is not { } record) { await conn.Commands!.Reply("State Control: this character has no account record."); return; }
+            if (conn.Character.Id is not { } id || Accounts.GetCharacter(id) is not { } record) { await conn.Commands!.Reply("State Control: this character has no account record."); return; }
             // What waits in memory (experience, moved items) is written first: the state is the save as it is now.
             Program.SaveUnsavedProgressNow("save state");
             string? why = Saves.Atomically(() =>
@@ -84,13 +82,13 @@ public sealed class StateControlMod : IMod
             if (args.Length > 0 && args[0].Equals("undo", StringComparison.OrdinalIgnoreCase))
             {
                 int? undone = LoadStash(key, UndoKey + key, keepUndo: false);
-                if (undone is not null) await ShowStashAgain(remote, stream, ciphers, conn);
+                if (undone is not null) await ShowStashAgain(conn);
                 await conn.Commands!.Reply(undone is not null
                     ? $"State Control: the stash is as it was before ({undone} item(s))."
                     : "State Control: nothing to undo.");
                 return;
             }
-            if (conn.CharacterId is not { } id || Accounts.GetCharacter(id) is not { } record) { await conn.Commands!.Reply("State Control: this character has no account record."); return; }
+            if (conn.Character.Id is not { } id || Accounts.GetCharacter(id) is not { } record) { await conn.Commands!.Reply("State Control: this character has no account record."); return; }
             var told = new List<string>();
             int? items = LoadStash(key, StashKey + key, keepUndo: true);
             if (items is not null) told.Add($"stash ({items} item(s))");
@@ -99,14 +97,14 @@ public sealed class StateControlMod : IMod
             {
                 if (Saves.Db.GetMeta(CharacterKey + other.Id.ToString("N")) is not { } text || JsonSerializer.Deserialize<CharacterState>(text, Json) is not { } state) continue;
                 if (other.Id == id) { _pending[id] = (state, DateTimeOffset.UtcNow); leaving = true; told.Add(other.Name); }
-                else if (Program.InGame.Keys.Any(c => c.CharacterId == other.Id && !c.Closed)) told.Add($"{other.Name} (in game elsewhere: not loaded)");
+                else if (Program.InGame.Keys.Any(c => c.Character.Id == other.Id && !c.Closed)) told.Add($"{other.Name} (in game elsewhere: not loaded)");
                 else told.Add(Restore(state) is { } why ? $"{other.Name} (not loaded: {why})" : other.Name);
             }
             if (told.Count == 0) { await conn.Commands!.Reply("State Control: nothing is saved yet (/save_character, /save_stash)."); return; }
             _log($"{record.Name}: loading {string.Join(", ", told)}");
             if (!leaving)
             {
-                if (items is not null) await ShowStashAgain(remote, stream, ciphers, conn);
+                if (items is not null) await ShowStashAgain(conn);
                 await conn.Commands!.Reply($"State Control: loaded {string.Join(", ", told)}.");
                 return;
             }
@@ -128,7 +126,7 @@ public sealed class StateControlMod : IMod
                 return Count(state);
             });
             _log($"stash {key}: {(removed < 0 ? "nothing to clear" : $"{removed} item(s) cleared")}");
-            if (removed >= 0) await ShowStashAgain(remote, stream, ciphers, conn);
+            if (removed >= 0) await ShowStashAgain(conn);
             await conn.Commands!.Reply(removed < 0 ? "State Control: the stash has not been opened yet." : $"State Control: {removed} item(s) removed from the stash; /load_saves undo puts them back.");
         })
         .Add("fill_stash", "/fill_stash [amount] (State Control: put every item its special stash tabs hold into them: currency, fragments, essences, cards, uniques, gems, flasks and the rest)", async args =>
@@ -137,10 +135,10 @@ public sealed class StateControlMod : IMod
             if (Game.ItemsFor(conn).Error is { } error) { await conn.Commands!.Reply(error); return; }
             var stash = Game.PersonalStashOf(conn);
             var lines = new List<string>();
-            for (int tab = 0; tab < stash.Count; tab++) if (stash.IsShownTab(tab)) lines.AddRange(await Fill(remote, stream, ciphers, conn, stash, tab, amount));
+            for (int tab = 0; tab < stash.Count; tab++) if (stash.IsShownTab(tab)) lines.AddRange(await Fill(conn, stash, tab, amount));
             lines.AddRange(FillUniqueTabs(conn));
             // The tabs it added (gems, uniques) are in the client's tab list only once the list goes out again.
-            await Game.SendTabListAgain(remote, stream, ciphers, conn, InstanceStash.Personal);
+            await Game.SendTabListAgain(conn, InstanceStash.Personal);
             await conn.Commands!.Reply(lines.Count == 0 ? "State Control: the stash has no special tabs." : $"State Control: {string.Join("; ", lines)}.");
         })
         .Add("add_tab", "/add_tab <type> [count] [name] (State Control: add stash tabs of any type: " + string.Join(", ", TabTypes.Keys) + "; /add_tab list shows them)", async args =>
@@ -166,7 +164,7 @@ public sealed class StateControlMod : IMod
             var names = added.Select(stash.NameOf).ToList();
             // A Map or Unique tab's pages are made when the stash is read: read it again.
             if (type.Id is StashRules.Map or StashRules.Unique) AccountStash.Forget(StashOf(conn));
-            await Game.SendTabListAgain(remote, stream, ciphers, conn, InstanceStash.Personal);
+            await Game.SendTabListAgain(conn, InstanceStash.Personal);
             await conn.Commands!.Reply($"State Control: added {string.Join(", ", names)} ({type.Name}){(StashRules.NotShown(type.Id) ? "; the server does not show this kind's items yet" : "")}.");
         })
         .Add("remove_tab", "/remove_tab <name> | all confirm (State Control: remove the stash tabs of that name, or every tab, with what is in them; /load_saves undo puts them back)", async args =>
@@ -193,14 +191,14 @@ public sealed class StateControlMod : IMod
             // The panel is never left without a tab.
             if (stash.VisibleCount == 0 || Enumerable.Range(0, stash.Count).All(t => !stash.IsShownTab(t) || stash.TabType(t) == StashRules.Folder))
                 stash.Rename(stash.AddTabs(1, 1, "Stash", 0x7c, 0x54, 0x36)[0], "Stash");
-            await Game.SendTabListAgain(remote, stream, ciphers, conn, InstanceStash.Personal);
+            await Game.SendTabListAgain(conn, InstanceStash.Personal);
             _log($"stash {key}: removed {names.Count} tab(s), {items} item(s)");
             await conn.Commands!.Reply($"State Control: removed {(all ? $"all {names.Count} tabs" : string.Join(", ", names))} ({items} item(s)). /load_saves undo puts them back.");
         })
         .Add("make_characters", "/make_characters [campaign] (State Control: one level 100 character of every ascendancy on this account, with the quests' passive points and its ascendancy points; campaign: at the end of the story, with every waypoint)", async args =>
         {
             bool campaign = args.Length > 0 && args[0].Equals("campaign", StringComparison.OrdinalIgnoreCase);
-            if (conn.CharacterId is not { } id || Accounts.GetCharacter(id) is not { } record) { await conn.Commands!.Reply("State Control: this character has no account record."); return; }
+            if (conn.Character.Id is not { } id || Accounts.GetCharacter(id) is not { } record) { await conn.Commands!.Reply("State Control: this character has no account record."); return; }
             var choices = Game.Ascendancies.Definitions.Where(d => d.Identity.Family == AscendancyFamily.Normal).ToList();
             int have = Accounts.CharactersOf(record.AccountId).Count;
             if (have + choices.Count > MostCharacters)
@@ -235,7 +233,7 @@ public sealed class StateControlMod : IMod
         return why;
     }
 
-    string MakeCharacter(Character owner, CharacterClass cls, AscendancyCatalog.Definition ascendancy, bool campaign, ItemCatalog items)
+    string MakeCharacter(GameServer.Core.Accounts.Character owner, CharacterClass cls, AscendancyCatalog.Definition ascendancy, bool campaign, ItemCatalog items)
     {
         var accounts = Accounts;
         string called = new(ascendancy.Name.Where(char.IsLetterOrDigit).ToArray());
@@ -250,7 +248,7 @@ public sealed class StateControlMod : IMod
         string town = end?.Town ?? "1_1_town";
         Saves.Atomically(() =>
         {
-            accounts.AddCharacter(new Character(Guid.NewGuid(), owner.AccountId, name, cls, 100, owner.League, town, now, now, town));
+            accounts.AddCharacter(new GameServer.Core.Accounts.Character(Guid.NewGuid(), owner.AccountId, name, cls, 100, owner.League, town, now, now, town));
             // Its start kit, as its first login would make it; then what a finished campaign adds.
             PlayerInventories.SetClass(name, Program.Skills.RowOfClass((int)cls));
             PlayerInventories.For(name, items);
@@ -286,7 +284,7 @@ public sealed class StateControlMod : IMod
 
     // ---- the stash ----
 
-    static string StashOf(ClientState conn) => AccountStash.Key(conn.Account ?? Program.CharacterName(conn), conn.League);
+    static string StashOf(Player conn) => AccountStash.Key(conn.Character.Account ?? Program.CharacterName(conn), conn.Character.League);
 
     static int Count(StashState state) => state.Tabs.Values.Sum(t => t.Count) + state.Header.Tabs.Sum(t => t.Items.Count);
 
@@ -329,14 +327,14 @@ public sealed class StateControlMod : IMod
     /// <summary>After the stash was replaced in the database: the client drops every tab it has loaded (S→C 0xc1) and gets
     /// the tab list again with them marked not loaded, so the panel asks for each (0xc7) as it shows it, as after a tab
     /// switch (Game.SendStashTab).</summary>
-    static async Task ShowStashAgain(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    static async Task ShowStashAgain(Player conn)
     {
         var stash = Game.PersonalStashOf(conn);
-        foreach (int tab in conn.StashTabsSent.ToArray())
-            await Program.Send(remote, stream, ciphers, InstanceInventories.RemoveInventory(stash.InventoryOf(tab)),
+        foreach (int tab in conn.Connection.StashTabsSent.ToArray())
+            await Program.Send(conn, InstanceInventories.RemoveInventory(stash.InventoryOf(tab)),
                 $"0x00c1 unload stash tab {tab} inventory {stash.InventoryOf(tab)} (State Control: the stash was replaced)");
-        conn.StashTabsSent.Clear();
-        await Game.SendTabListAgain(remote, stream, ciphers, conn, InstanceStash.Personal);
+        conn.Connection.StashTabsSent.Clear();
+        await Game.SendTabListAgain(conn, InstanceStash.Personal);
     }
 
     /// <summary>The tab kinds /add_tab makes: a StashType row (AccountStash.Types), the name new tabs get, and a colour.</summary>
@@ -355,7 +353,7 @@ public sealed class StateControlMod : IMod
     /// value at its worst and at its best.</summary>
     static readonly (string Name, int Roll)[] UniqueTabs = [("", 0), ("Unique worst rolls", -1), ("Unique best rolls", 1)];
 
-    static List<string> FillUniqueTabs(ClientState conn)
+    static List<string> FillUniqueTabs(Player conn)
     {
         var told = new List<string>();
         string key = StashOf(conn);
@@ -406,9 +404,9 @@ public sealed class StateControlMod : IMod
             {
                 Values = new List<int>(m.Values.Select((value, stat) =>
                 {
-                    if (stat >= mod.Stats.Count || PicksSomething(mod.Stats[stat].Id)) return value;
+                    if (stat >= mod.Stats.Count || PicksSomething(mod.Stats[stat].Name)) return value;
                     var (min, max) = own?.Invoke(mod, m.Section, stat) ?? mod.RangeAt(stat);
-                    return (roll > 0) == LessIsBetter(mod.Stats[stat].Id) ? Math.Min(min, max) : Math.Max(min, max);
+                    return (roll > 0) == LessIsBetter(mod.Stats[stat].Name) ? Math.Min(min, max) : Math.Max(min, max);
                 })),
             })),
         };
@@ -444,7 +442,7 @@ public sealed class StateControlMod : IMod
     ];
 
     /// <summary>Fills one special tab with what it holds, by the stash's own rules, and shows the change.</summary>
-    static async Task<List<string>> Fill(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, AccountStash stash, int tab, int amount)
+    static async Task<List<string>> Fill(Player conn, AccountStash stash, int tab, int amount)
     {
         var told = new List<string>();
         byte? type = stash.TabType(tab);
@@ -453,7 +451,7 @@ public sealed class StateControlMod : IMod
         if (type == StashRules.Flask)
         {
             if (stash.FillFlasks(tab, Game.ItemsFor(conn), Game.ShapeOf, out string why) is not { } flasks) { told.Add($"{name}: {why}"); return told; }
-            if (flasks.Added.Count > 0) await Game.SendTabChange(remote, stream, ciphers, conn, stash, tab, [], flasks.Added, $"0x00bf stash tab {tab}: /fill_stash, {flasks.Added.Count} flask(s)");
+            if (flasks.Added.Count > 0) await Game.SendTabChange(conn, stash, tab, [], flasks.Added, $"0x00bf stash tab {tab}: /fill_stash, {flasks.Added.Count} flask(s)");
             told.Add($"{name}: {flasks.Added.Count} flask(s)");
         }
         else if (type == StashRules.Unique) { }   // the unique tabs are filled together (FillUniqueTabs)
@@ -472,7 +470,7 @@ public sealed class StateControlMod : IMod
                     GemExperience = levelled && kinds.Gem(g.Type) is { } info ? info.ExperienceFor(Math.Min(20, info.MaxLevel)) : 0,
                 });
                 if (stash.FillCells(at, wanted, i => $"{i.TypeHash:x8}:{i.GemVariant}", Game.ShapeOf, out string gemWhy) is not { } put) { told.Add($"{tabName}: {gemWhy}"); continue; }
-                if (!added && put.Added.Count > 0) await Game.SendTabChange(remote, stream, ciphers, conn, stash, at, [], put.Added, $"0x00bf stash tab {at}: /fill_stash, {put.Added.Count} gem(s)");
+                if (!added && put.Added.Count > 0) await Game.SendTabChange(conn, stash, at, [], put.Added, $"0x00bf stash tab {at}: /fill_stash, {put.Added.Count} gem(s)");
                 told.Add($"{tabName}: {put.Added.Count} gem(s){(put.Skipped > 0 ? $", {put.Skipped} found no room" : "")}{(added ? " (a new tab: enter another area to see it)" : "")}");
             }
             return told;
@@ -486,7 +484,7 @@ public sealed class StateControlMod : IMod
             // The server fills a card's slot to one complete set; a card tab holds as many as any other slot.
             if (type == StashRules.Divination)
                 now = [.. stash.Inventory(tab).Items.Select(i => i.Item.StackSize == amount ? null : stash.Change(tab, i.Id, card => card with { StackSize = (ushort)Math.Min(amount, StashRules.SlotStack) })).OfType<InventoryItem>()];
-            if (now.Count > 0) await Game.SendTabChange(remote, stream, ciphers, conn, stash, tab, [.. fill.Changed.Select(i => i.Id)], now, $"0x00bf stash tab {tab}: /fill_stash {amount}, {now.Count} slot(s)");
+            if (now.Count > 0) await Game.SendTabChange(conn, stash, tab, [.. fill.Changed.Select(i => i.Id)], now, $"0x00bf stash tab {tab}: /fill_stash {amount}, {now.Count} slot(s)");
             told.Add($"{name}: {now.Count} kind(s)");
         }
         return told;
