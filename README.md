@@ -63,6 +63,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [survivors](mods/survivors/) | the Survivors league: survive the horde, skills cast themselves, an upgrade each run level; a league's mod |
 | [excitingitems](mods/excitingitems/) | rare drop surprises: unique modifiers as extra implicits, empowered modifiers and a fractured extra modifier, all configurable |
 | [deposit](mods/deposit/) | `/deposit` at your stash sends currency, fragments, cards, essences, gems and flasks to their special tabs in one go, with a keep list |
+| [currencyaura](mods/currencyaura/) | auto-loots currency near you like gold, with optional divination cards and scarabs, an adjustable radius and a never-pick-up list |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to
