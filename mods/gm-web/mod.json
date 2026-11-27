@@ -1,0 +1,15 @@
+{
+  "id": "gm-web",
+  "name": "GM Web Tool",
+  "description": "Serves the GM commands page at http://127.0.0.1:6111/ (loopback only): pick a command in the browser and it runs in game.",
+  "author": "cjjlovedsn",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.0-beta",
+    "0.6.1-beta"
+  ],
+  "kind": "feature",
+  "depends": [
+    "Game"
+  ]
+}
