@@ -52,6 +52,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [zoom](mods/zoom/) | a wider view in normal play: the camera stands further back, the mouse wheel reaches it, `/zoom` sets how far |
 | [itemquantity](mods/itemquantity/) | 10× as many item drops |
 | [currencyloot](mods/currencyloot/) | Configurable bonus currency per eligible kill |
+| [lootweights](mods/lootweights/) | Drop quantity, rarity, gold, maps, item kinds, map cards and scarabs, and single currencies, cards and scarabs |
 | [mapdrop](mods/mapdrop/) | Configurable bonus map rolls for eligible kills |
 | [pob](mods/pob/) | preview and import character builds through an external converter; requires LocalExile #639 |
 | [itemrarity](mods/itemrarity/) | 10× the chance of magic, rare and unique equipment |
