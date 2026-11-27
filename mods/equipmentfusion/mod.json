@@ -4,9 +4,8 @@
   "description": "Adds non-weapon skin-transfer donor attributes and independently calculated defences automatically.",
   "author": "JJ ouyang",
   "version": "2.0.3",
-  "compatibleClientVersions": ["0.5.2-beta"],
+  "compatibleClientVersions": ["0.6.0-beta", "0.6.1-beta"],
   "kind": "feature",
   "depends": ["Game"],
-  "enabled": false,
-  "requiredServerApis": ["Item.SkinTransferSource", "GameEvents.ItemStatSources"]
+  "enabled": false
 }

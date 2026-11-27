@@ -17,4 +17,5 @@ The factors stack with the league's rates, the `drop_multiplier_*` server settin
 Item Rarity). Enable it with Waypoint or `/mod_enable lootweights`; it starts disabled and adds no chat commands. Edit the
 settings in Waypoint, or in `data/mods/lootweights.json` in the server folder; a change reloads the mod.
 
-Needs `DropRoll.Weights`, which no LocalExile release has yet.
+Works with LocalExile 0.6.1-beta: it needs `DropRoll.Weights`
+([LocalExile #1235](https://github.com/LocalExile/LocalExile/pull/1235)).

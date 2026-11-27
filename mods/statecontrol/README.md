@@ -33,6 +33,6 @@ minutes to end, the character is left as it is and the log says so: run `/load_s
 | `fillAmount` | 1000 | How many of each item `/fill_stash` puts in a slot. |
 | `questPassivePoints` | 24 | The passive points `/make_characters` gives for the campaign's quests (22 from quests, 2 for killing the bandits). |
 
-Works with LocalExile 0.5.3-beta and later: it needs the `CharacterAtRest` event
+Works with LocalExile 0.6.0-beta and 0.6.1-beta: it needs `Player` (0.6.0-beta), the `CharacterAtRest` event
 ([#1172](https://github.com/LocalExile/LocalExile/pull/1172)) and stash tab removal
 ([#1170](https://github.com/LocalExile/LocalExile/pull/1170)).
