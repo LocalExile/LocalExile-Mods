@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "settings": {
+    "allowUniqueBodyArmour": {
+      "type": "bool",
+      "default": true,
+      "applies": "now",
+      "label": "Allow unique body armour",
+      "description": "Allow permanent mercenaries to equip Unique Body Armours (3.26 parity; native drag and Ctrl+click require the optional NativeMods client plugin, or use /merc326 equip on vanilla clients)."
+    },
+    "spawnInAllZones": {
+      "type": "bool",
+      "default": false,
+      "applies": "nextArea",
+      "label": "Spawn in every combat zone",
+      "description": "Spawn a mercenary encounter in every campaign combat zone and map once the character has reached The Mud Flats, scaled to player level."
+    },
+    "enableNobleBloodDamagePenalty": {
+      "type": "bool",
+      "default": false,
+      "applies": "now",
+      "label": "Noble Blood -30% damage penalty",
+      "description": "Apply Luminary Noble Blood's 30% less Mercenary and Minion Damage penalty (off by default for 3.26 parity)."
+    },
+    "enableOathOfFealty": {
+      "type": "bool",
+      "default": true,
+      "applies": "now",
+      "label": "Oath of Fealty",
+      "description": "Link skills cost 50% less, have infinite attachment duration, and you do not die when your linked permanent mercenary dies."
+    },
+    "enableGoldenGlory": {
+      "type": "bool",
+      "default": true,
+      "applies": "now",
+      "label": "Golden Glory",
+      "description": "Increases and reductions to Light Radius also apply to the buff effect of Link skills on your permanent mercenary."
+    },
+    "enableLoyalBodyguard": {
+      "type": "bool",
+      "default": true,
+      "applies": "now",
+      "label": "Loyal Bodyguard",
+      "description": "20% of hit damage is taken from your nearest permanent mercenary before your Life or Energy Shield if their Life is higher; 40% of damage they take is recouped as Life if their Life is lower."
+    },
+    "enableBestowedKnighthood": {
+      "type": "bool",
+      "default": true,
+      "applies": "now",
+      "label": "Bestowed Knighthood",
+      "description": "Your permanent mercenary has 50% increased effect of non-curse auras from skills and 100% chance to taunt on hit."
+    },
+    "enableLegendaryArmsDamageBonus": {
+      "type": "bool",
+      "default": true,
+      "applies": "now",
+      "label": "Legendary Arms damage bonus",
+      "description": "Your permanent mercenary and their minions deal 8% more damage per equipped unique item."
+    },
+    "enableLuminarySmallNodes": {
+      "type": "bool",
+      "default": true,
+      "applies": "now",
+      "label": "Luminary small passive bonuses",
+      "description": "Grant all 7 Luminary small passives (+30% Mercenary and Minion maximum Life, +45% Mercenary and Minion Damage, +20% Link Skill Cast Speed, +35% Light Radius)."
+    }
+  }
+}
