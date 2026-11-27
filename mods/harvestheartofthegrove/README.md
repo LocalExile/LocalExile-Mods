@@ -30,6 +30,6 @@ the id is the same in any case. The setting below moves with it, from `data/modu
 
 ## LocalExile versions
 
-Needs a LocalExile with league mods ([LocalExile #1588](https://github.com/LocalExile/LocalExile/pull/1588)): the first
-release after 0.6.0-beta. While a LocalExile still has the Legacy module, that module runs and this mod waits
+Needs a LocalExile with league mods ([LocalExile #1588](https://github.com/LocalExile/LocalExile/pull/1588)): works with
+LocalExile v0.6.1-beta. While a LocalExile still has the Legacy module, that module runs and this mod waits
 ("LocalExile has a module of that id").

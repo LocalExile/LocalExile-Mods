@@ -46,8 +46,8 @@ The other Phrecia classes are refused before they are saved. Each class's checkl
 
 ## LocalExile versions
 
-Needs a LocalExile with league mods ([LocalExile #1588](https://github.com/LocalExile/LocalExile/pull/1588)): the first
-release after 0.6.0-beta. While a LocalExile still has the Legacy module, that module runs and this mod waits
+Needs a LocalExile with league mods ([LocalExile #1588](https://github.com/LocalExile/LocalExile/pull/1588)): works with
+LocalExile v0.6.1-beta. While a LocalExile still has the Legacy module, that module runs and this mod waits
 ("LocalExile has a module of that id"), and LocalExile's own Phrecia league is the one used.
 
 `tests/` holds its tests from LocalExile; they need LocalExile's test project and do not run here yet.

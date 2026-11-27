@@ -2,7 +2,7 @@
 
 Optional Path of Building import front end for LocalExile. It is a normal global mod: `IMod`, `mod.json`, host-managed settings and hot reload. It uses the public SDK and Gateway `GameEvents`; it is absent from server modules, league lists and normal server releases.
 
-1.0.5 requires LocalExile **0.6.0-beta** (`Player`); 1.0.2-1.0.4 worked with **0.4.3-beta** to **0.5.2-beta**; its converter contract is unchanged since 1.0.2. The strict converter source in `Converter/` needs **0.5.2-beta** or later, the first release with native item properties and game-owned import validation (LocalExile/LocalExile#1013): an older server refuses the builds it prepares.
+1.0.6 works with LocalExile **0.6.0-beta** and **0.6.1-beta** (the same code as 1.0.5, which requires 0.6.0-beta for `Player`); 1.0.2-1.0.4 worked with **0.4.3-beta** to **0.5.2-beta**; its converter contract is unchanged since 1.0.2. The strict converter source in `Converter/` needs **0.5.2-beta** or later, the first release with native item properties and game-owned import validation (LocalExile/LocalExile#1013): an older server refuses the builds it prepares.
 
 ## Installation and commands
 

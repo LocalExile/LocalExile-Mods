@@ -7,8 +7,9 @@
     server's own assemblies (the Gateway has them) or .pdb files, and with the Leagues/ and sql/ folders it brings;
   - a script mod: its folder, without README.md.
   A project mod builds against GameServer.Modding, the Gateway, Core and Game of the LocalExile checkout in -LocalExileRoot (by default LocalExile/
-  beside this repository); the notes name that checkout's commit. The build goes to out/, never into that checkout's
-  Mods/Binaries/, so a running Gateway there is not disturbed.
+  beside this repository); the notes name that checkout's commit. The mod's build goes to out/, never into that checkout's
+  Mods/Binaries/. The LocalExile modules it references (Game, and Harvest or Social for some) are built in Release into
+  their own bin/ there, which a running Gateway reloads: stop it first, or use another checkout.
   -Tag (<id>-v<version>, as the release workflow passes it) fails when the mod's mod.json has another version.
   Run from the repository root: tools/build-release.ps1 itemquantity
 #>
