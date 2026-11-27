@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- NativeMods 1.2.0 client plugin for mercenaries326.
+       Builds mercenaries326.Client.dll into <LocalExileRoot>/Mods/Client/mercenaries326/ beside mod.json.
+       Pass -p:LocalExileRoot=<path> and/or -p:NativeModsRoot=<path> to override sibling repository locations. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Mercenaries326.Client</RootNamespace>
+    <AssemblyName>mercenaries326.Client</AssemblyName>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+
+    <LocalExileRoot Condition="'$(LocalExileRoot)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\..\..\LocalExile\src\GameServer.Modding\GameServer.Modding.csproj')">$(MSBuildThisFileDirectory)..\..\..\..\LocalExile\</LocalExileRoot>
+    <LocalExileRoot Condition="'$(LocalExileRoot)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\..\..\..\LocalExile\src\GameServer.Modding\GameServer.Modding.csproj')">$(MSBuildThisFileDirectory)..\..\..\..\..\LocalExile\</LocalExileRoot>
+    <LocalExileDir Condition="'$(LocalExileRoot)' != ''">$([MSBuild]::EnsureTrailingSlash('$(LocalExileRoot)'))</LocalExileDir>
+
+    <NativeModsRoot Condition="'$(NativeModsRoot)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\..\..\NativeMods\src\LocalExile.Client.Sdk\LocalExile.Client.Sdk.csproj')">$(MSBuildThisFileDirectory)..\..\..\..\NativeMods\</NativeModsRoot>
+    <NativeModsDir Condition="'$(NativeModsRoot)' != ''">$([MSBuild]::EnsureTrailingSlash('$(NativeModsRoot)'))</NativeModsDir>
+    <_SdkProjectPath Condition="'$(NativeModsDir)' != ''">$(NativeModsDir)src\LocalExile.Client.Sdk\LocalExile.Client.Sdk.csproj</_SdkProjectPath>
+
+    <OutputPath Condition="'$(ModClientOutput)' != ''">$(ModClientOutput)</OutputPath>
+    <OutputPath Condition="'$(ModClientOutput)' == '' and '$(LocalExileDir)' != ''">$(LocalExileDir)Mods\Client\mercenaries326\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compiled against LocalExile.Client.Sdk only (never copied: ClientModLoadContext unifies SDK from the host). -->
+    <ProjectReference Include="$(_SdkProjectPath)" Condition="'$(_SdkProjectPath)' != '' and Exists('$(_SdkProjectPath)')" Private="false" />
+    <PackageReference Include="LocalExile.Client.Sdk" Version="1.2.0" Condition="'$(_SdkProjectPath)' == '' or !Exists('$(_SdkProjectPath)')" ExcludeAssets="runtime" />
+
+    <!-- Copy the unified dual-side mod.json alongside mercenaries326.Client.dll for NativeMods ClientModLoader. -->
+    <None Include="..\mod.json" Link="mod.json" Condition="Exists('..\mod.json')" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

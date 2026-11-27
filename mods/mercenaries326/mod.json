@@ -1,0 +1,35 @@
+{
+  "id": "mercenaries326",
+  "name": "3.26 Mercenaries",
+  "description": "Brings 3.26 Mercenaries of Trarthus to every class: permanent mercenaries, all unique slots including body armour, optional all-zone spawning from Mud Flats, and configurable Luminary bonuses.",
+  "author": "mrnamwen",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.1-beta"
+  ],
+  "kind": "feature",
+  "depends": [
+    "Game",
+    "Mercenary"
+  ],
+  "leagues": "all",
+  "enabled": true,
+  "nativeClient": {
+    "required": false,
+    "depends": [],
+    "sdkVersionRange": ">=1.2.0 <2.0.0",
+    "supportedBuilds": [
+      "3.29.3d",
+      "3.29.3c"
+    ],
+    "assembly": "mercenaries326.Client.dll",
+    "rawAccess": true,
+    "rawAccessJustification": "Hooks GetPlayerAscendancyRow (0x242d3f0) and CanMercenaryEquipItem (0x2480d70) via HookEngine pre-chains to show the Encounter Hire button for all classes and allow Unique Body Armour on permanent mercenaries when the mercenaries326 server mod is active.",
+    "serverHalf": {
+      "id": "mercenaries326",
+      "minVersion": "1.0.0",
+      "supportsGracefulFallback": true,
+      "channelName": "mercenaries326"
+    }
+  }
+}
