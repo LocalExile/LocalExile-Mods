@@ -4,7 +4,8 @@ An opt-in mod: a worn cosmetic pet walks to nearby selected stackable items and 
 enable it with `/mod_enable petloot` or Waypoint. `/petloot off` pauses pickup for this character, including after an
 area change or restart; `/petloot on` resumes it. Removing or disabling the mod leaves normal pets following the player.
 
-1.2.2 works with LocalExile v0.6.0-beta and v0.6.1-beta (the same code as 1.2.1, which requires v0.6.0-beta for `Player`, `GameEvents.AreaTick`); 1.1.0-1.2.0 required LocalExile v0.5.2-beta, the first release with the movement-speed hook
+1.2.3 adds direct pickup chaining on LocalExile v0.6.0-beta and v0.6.1-beta. Versions 1.2.1-1.2.2 require at least
+v0.6.0-beta for `Player` and `GameEvents.AreaTick`; 1.1.0-1.2.0 required LocalExile v0.5.2-beta, the first release with the movement-speed hook
 ([LocalExile PR #1045](https://github.com/LocalExile/LocalExile/pull/1045)); it does not load on v0.5.1-beta, where 1.0.5
 is the version to use. Pickup runs in leagues with both Game and Cosmetics.
 
@@ -50,5 +51,6 @@ Waypoint edits the defaults and rules declared in `settings.json`. User changes 
 league and character; another player's choices are unaffected. A character's first command snapshots the current
 defaults. Reset that profile to follow future default changes again. Keep this user's settings file private.
 
-The mod orders one walk per target. The server checks the pet and the item again when collecting.
-If a target disappears, the pet can take another eligible target on the same tick. With no target, it returns to ordinary pet following.
+The server checks the pet and the item again when collecting. The same pet then goes straight to the closest eligible drop
+from its current position, within the character's pickup radius. If another player picks up the target first, the pet can
+switch to another drop. Once no eligible drop remains, it returns to ordinary pet following.
