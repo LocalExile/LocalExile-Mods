@@ -48,7 +48,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [gm-web](mods/gm-web/) | gm-commands as a browser page at http://127.0.0.1:6111/ (loopback only): pick a command, it runs in game |
 | [globalchat](mods/globalchat/) | talk to other LocalExile players through the LocalExile global chat server |
 | [waypoint-tools](mods/waypoint-tools/) | lets Waypoint's tools reach the game without the client control bridge: the item crafter gives its items through it |
-| [equipmentfusion](mods/equipmentfusion/) | automatic attributes and defences from non-weapon native skin transfers; donor gems and skills excluded; requires the companion server update |
+| [equipmentfusion](mods/equipmentfusion/) | automatic attributes and defences from non-weapon native skin transfers; donor gems and skills excluded |
 | [backpack](mods/backpack/) | an optional native 20-slot extra backpack for every class, with safe recovery after disable |
 | [petloot](mods/petloot/) | optional pet pickup with per-character filters, minimum stacks, pause/resume and configurable 2x pet speed |
 | [zoom](mods/zoom/) | a wider view in normal play: the camera stands further back, the mouse wheel reaches it, `/zoom` sets how far |
