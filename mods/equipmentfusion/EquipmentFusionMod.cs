@@ -15,7 +15,7 @@ public sealed class EquipmentFusionMod : IMod, IDisposable
         public (byte Row, InventoryItem Item)[] Hosts = [];
         public IReadOnlyList<(byte Row, InventoryItem Item)> Sources = [];
     }
-    readonly ConditionalWeakTable<ClientState, object> _views = new();
+    readonly ConditionalWeakTable<Player, object> _views = new();
     readonly Lock _cacheGate = new();
     int _disposed;
     static readonly HashSet<byte> Slots = [1, 4, 5, 6, 7, 8, 9, 10, 102];
@@ -23,38 +23,38 @@ public sealed class EquipmentFusionMod : IMod, IDisposable
 
     public void Load(IModContext mod) => GameEvents.ItemStatSources.Add(mod.Manifest.Id, Sources);
 
-    public IReadOnlyList<(byte Row, InventoryItem Item)> Sources(ClientState conn,
+    public IReadOnlyList<(byte Row, InventoryItem Item)> Sources(Player player,
         IReadOnlyList<(byte Row, InventoryItem Item)> native)
     {
         if (Volatile.Read(ref _disposed) != 0) return Array.Empty<(byte, InventoryItem)>();
-        if (!_views.TryGetValue(conn, out var view))
+        if (!_views.TryGetValue(player, out var view))
             lock (_cacheGate)
             {
                 if (Volatile.Read(ref _disposed) != 0) return Array.Empty<(byte, InventoryItem)>();
-                if (!_views.TryGetValue(conn, out view)) _views.Add(conn, view = new Cached());
+                if (!_views.TryGetValue(player, out view)) _views.Add(player, view = new Cached());
             }
         var cache = (Cached)view;
         lock (cache.Gate)
         {
             if (Volatile.Read(ref _disposed) != 0)
             {
-                _views.Remove(conn);
+                _views.Remove(player);
                 return Array.Empty<(byte, InventoryItem)>();
             }
             bool same = cache.Hosts.Length == native.Count;
             for (int i = 0; same && i < native.Count; i++)
                 same = cache.Hosts[i].Row == native[i].Row && ReferenceEquals(cache.Hosts[i].Item, native[i].Item);
             if (same) return cache.Sources;
-            cache.Sources = BuildSources(conn, native);
+            cache.Sources = BuildSources(player, native);
             cache.Hosts = [.. native];
             return cache.Sources;
         }
     }
 
-    IReadOnlyList<(byte Row, InventoryItem Item)> BuildSources(ClientState conn,
+    IReadOnlyList<(byte Row, InventoryItem Item)> BuildSources(Player player,
         IReadOnlyList<(byte Row, InventoryItem Item)> native)
     {
-        var catalog = ItemsFor(conn);
+        var catalog = ItemsFor(player);
         var result = new List<(byte Row, InventoryItem Item)>();
         foreach (var (row, target) in native)
         {
@@ -84,7 +84,7 @@ public sealed class EquipmentFusionMod : IMod, IDisposable
             if (mods.ByHash(mod.Hash) is not { } row) { projected[i] = mod; continue; }
             var values = new int[mod.Values.Count];
             for (int index = 0; index < values.Length; index++)
-                values[index] = index < row.Stats.Count && SkillExecution(row.Stats[index].Id) ? 0 : mod.Values[index];
+                values[index] = index < row.Stats.Count && SkillExecution(row.Stats[index].Name) ? 0 : mod.Values[index];
             projected[i] = mod with { Values = values };
         }
         return donor with { Sockets = Array.Empty<ItemSocket>(), Links = null, Mods = projected };
