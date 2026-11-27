@@ -68,6 +68,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [deposit](mods/deposit/) | `/deposit` at your stash sends currency, fragments, cards, essences, gems and flasks to their special tabs in one go, with a keep list |
 | [currencyaura](mods/currencyaura/) | auto-loots currency near you like gold, with optional divination cards and scarabs, an adjustable radius and a never-pick-up list |
 | [thirdringslot](mods/thirdringslot/) | the third ring slot for every character, the stat The Unseen Hand grants, without the ascendancy |
+| [statecontrol](mods/statecontrol/) | testing and practice tools: save and load characters and the stash, fill, add and remove stash tabs, make level 100 characters; requires LocalExile #1170 and #1172 |
 
 ## Contributing
 People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): how a mod is laid out, the rules, and how to
