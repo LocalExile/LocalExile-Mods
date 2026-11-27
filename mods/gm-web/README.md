@@ -2,7 +2,8 @@
 
 Serves [gm-commands](../gm-commands/)' commands as a browser page at http://127.0.0.1:6111/: pick a command and it
 runs in game, without typing it in the client's chat. One machine only — the page is served on 127.0.0.1, and a
-request body that is not a slash command is refused.
+request body that is not a slash command is refused. A request from another site (another `Host` or `Origin`) is
+refused too, so a web page open in the browser cannot run commands in game.
 
 - The tabs search everything the commands resolve, with a button per row: the areas `/goto` finds, the monsters
   `/spawn_mob` can create, and every base type and unique `/item` gives. `GET /names` builds those tables from the

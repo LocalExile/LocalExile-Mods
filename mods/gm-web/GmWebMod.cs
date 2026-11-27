@@ -13,6 +13,7 @@ public sealed class GmWebMod : IMod, IDisposable
 {
     const int Port = 6111;
     CancellationTokenSource? _stopping;
+    TcpListener? _listener;
     string? _folder;
 
     /// <inheritdoc/>
@@ -20,6 +21,9 @@ public sealed class GmWebMod : IMod, IDisposable
     {
         _stopping?.Cancel();
         _stopping = null;
+        // Freed now, not when the accept loop next wakes: a reload's new instance binds the same port right away.
+        _listener?.Stop();
+        _listener = null;
     }
 
     /// <inheritdoc/>
@@ -27,11 +31,6 @@ public sealed class GmWebMod : IMod, IDisposable
     {
         _folder = mod.Folder;
         _stopping = new();
-        _ = Task.Run(() => Serve(_stopping.Token));
-    }
-
-    async Task Serve(CancellationToken cancelled)
-    {
         var listener = new TcpListener(System.Net.IPAddress.Loopback, Port);
         try { listener.Start(); }
         catch (SocketException e)
@@ -39,13 +38,22 @@ public sealed class GmWebMod : IMod, IDisposable
             Console.WriteLine($"[gm-web] cannot listen on 127.0.0.1:{Port}: {e.Message}");
             return;
         }
+        _listener = listener;
+        var stopping = _stopping.Token;
+        _ = Task.Run(() => Serve(listener, stopping));
+    }
+
+    async Task Serve(TcpListener listener, CancellationToken cancelled)
+    {
         Console.WriteLine($"[gm-web] the GM page is at http://127.0.0.1:{Port}/");
         while (!cancelled.IsCancellationRequested)
         {
             TcpClient client;
             try { client = await listener.AcceptTcpClientAsync(cancelled); }
             catch (OperationCanceledException) { break; }
-            catch (SocketException) { continue; }
+            catch (ObjectDisposedException) { break; }
+            catch (SocketException) when (!cancelled.IsCancellationRequested) { continue; }
+            catch (SocketException) { break; }
             _ = Task.Run(() => Answer(client), cancelled);
         }
         listener.Stop();
@@ -64,6 +72,12 @@ public sealed class GmWebMod : IMod, IDisposable
             string[] requestLine = head[0].Split(' ');
             if (requestLine.Length < 2) { await Write(stream, 400, "text/plain", "bad request"u8.ToArray()); return; }
             string method = requestLine[0], path = requestLine[1].Split('?')[0];
+            // Only this page may call in: a Host other than our own is a DNS-rebinding page, and a browser marks a POST
+            // from another site with its Origin, so a site the player visits cannot run commands in game.
+            string? host = Header(head, "Host"), origin = Header(head, "Origin");
+            if (host is not ("127.0.0.1:6111" or "localhost:6111")
+                || method == "POST" && origin is not (null or "http://127.0.0.1:6111" or "http://localhost:6111"))
+            { await Write(stream, 403, "text/plain", "forbidden"u8.ToArray()); return; }
             byte[] body = BodyAfter(request);
             if (method == "GET" && path is "/" or "/index.html")
             {
@@ -136,6 +150,17 @@ public sealed class GmWebMod : IMod, IDisposable
         return Encoding.UTF8.GetString(received.Take(headerEnd + 4 + contentLength).ToArray());
     }
 
+    static string? Header(string[] head, string name)
+    {
+        foreach (string line in head.Skip(1))
+        {
+            if (line.Length == 0) break;
+            int colon = line.IndexOf(':');
+            if (colon > 0 && line[..colon].Trim().Equals(name, StringComparison.OrdinalIgnoreCase)) return line[(colon + 1)..].Trim();
+        }
+        return null;
+    }
+
     static byte[] BodyAfter(string request)
     {
         int start = request.IndexOf("\r\n\r\n", StringComparison.Ordinal);
@@ -155,7 +180,7 @@ public sealed class GmWebMod : IMod, IDisposable
 
     internal static async Task Write(NetworkStream stream, int status, string type, byte[] body)
     {
-        string head = $"HTTP/1.1 {status} {(status == 200 ? "OK" : status == 400 ? "Bad Request" : status == 500 ? "Internal Server Error" : status == 503 ? "Service Unavailable" : "Not Found")}\r\n" +
+        string head = $"HTTP/1.1 {status} {(status == 200 ? "OK" : status == 400 ? "Bad Request" : status == 500 ? "Internal Server Error" : status == 503 ? "Service Unavailable" : status == 403 ? "Forbidden" : "Not Found")}\r\n" +
             $"Content-Type: {type}\r\nContent-Length: {body.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
         await stream.WriteAsync(Encoding.ASCII.GetBytes(head));
         await stream.WriteAsync(body);
