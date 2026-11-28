@@ -17,7 +17,31 @@
     "maxBots": {
       "type": "integer", "default": 100, "min": 0, "max": 1000,
       "label": "Most bots",
-      "description": "Bots at most, all towns together."
+      "description": "Bots at most across the whole server."
+    },
+    "townBotsMode": {
+      "type": "choice", "default": "auto",
+      "options": [
+        { "value": "auto", "label": "Automatic (from Most bots)" },
+        { "value": "custom", "label": "Custom count per town" },
+        { "value": "organic", "label": "Organic (life cycle only)" }
+      ],
+      "label": "Town visitors",
+      "description": "Automatic scales each town from Most bots; Custom uses Bots per town (lower or boosted); Organic never backfills towns and only shows bots whose own quests bring them there."
+    },
+    "townBots": {
+      "type": "range", "of": "integer", "default": [2, 5], "min": 0, "max": 100,
+      "label": "Bots per town (Custom)",
+      "description": "Visiting bots kept in a town you are in when Town visitors is set to Custom."
+    },
+    "persistenceMode": {
+      "type": "choice", "default": "cycling",
+      "options": [
+        { "value": "cycling", "label": "Cycling (retire after Epilogue)" },
+        { "value": "persistent", "label": "Persistent (level 1-100 world)" }
+      ],
+      "label": "Character lifecycle",
+      "description": "Cycling deletes a bot after all campaign quests and lets towns reassign questing bots. Persistent keeps accounts and characters through endgame up to level 100, recovers them from saves if bots.json is missing, and never warps them across acts."
     },
     "firstSpawnSeconds": {
       "type": "integer", "default": 60, "min": 0, "max": 86400, "format": "duration", "unit": "s",

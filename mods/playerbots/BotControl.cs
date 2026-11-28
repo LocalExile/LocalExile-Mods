@@ -56,8 +56,8 @@ sealed partial class BotDirector
             if (tool == "list_bots") return new { bots = _bots.Select(b => new
             {
                 botId = b.CharacterId, name = b.Name, level = b.Level, characterClass = b.Class.ToString(),
-                phase = b.Phase.ToString(), leader = b.LeaderName, area = b.Combat?.Layout.Id ?? b.Town,
-                controllable = Ready(b) && b.Combat!.PlayerLife > 0, controller = b.Control?.Controller, leaseSecondsLeft = b.Control?.Remaining ?? 0,
+                phase = b.Phase.ToString(), leader = b.LeaderName, area = b.Body?.Layout.Id ?? b.Town,
+                controllable = Ready(b) && b.Body!.PlayerLife > 0, controller = b.Control?.Controller, leaseSecondsLeft = b.Control?.Remaining ?? 0,
             }).ToArray() };
             var bot = _bots.SingleOrDefault(b => b.CharacterId == Guid.Parse(BotMcpProtocol.Text(args, "botId", 36)))
                 ?? throw new InvalidOperationException("Unknown bot. Refresh list_bots.");
@@ -71,14 +71,14 @@ sealed partial class BotDirector
                         { botId = b.CharacterId, name = b.Name, peerId = b.PeerId, controller = b.Control?.Controller }).ToArray(),
                     players = PartyRoster.Players(bot.Party).Select(c => new
                         { name = Program.CharacterName(c), peerId = c.Id, leader = ReferenceEquals(c, bot.Leader) }).ToArray(),
-                    observation = BotPlay.ObserveControlledPlayer(bot.Combat!, bot.Leader!) };
+                    observation = BotPlay.ObserveControlledPlayer(bot.Body!, bot.Leader!) };
             }
             if (tool == "claim_bot")
             {
-                if (!Ready(bot) || bot.Combat!.PlayerLife == 0) throw new InvalidOperationException("Only a ready living bot in a live human player's party can be claimed.");
+                if (!Ready(bot) || bot.Body!.PlayerLife == 0) throw new InvalidOperationException("Only a ready living bot in a live human player's party can be claimed.");
                 if (bot.Control is not null) throw new InvalidOperationException("Bot is already leased; its controller must release it or let the lease expire.");
                 var claimed = new BotControlLease(BotMcpProtocol.Text(args, "controller", 80), _settings.McpLeaseSeconds);
-                var player = bot.Combat!;
+                var player = bot.Body!;
                 BotPlay.QueueControlledIntent(player, new(Guid.NewGuid().ToString("N"), "hold",
                     player.Frames.Now(player) + 3, WallDeadline: claimed.Deadline));
                 bot.Control = claimed;
@@ -92,7 +92,7 @@ sealed partial class BotDirector
             if (tool == "renew_control") { lease.Renew(); return new { botId = bot.CharacterId, seconds = lease.Remaining }; }
             if (tool == "release_bot")
             {
-                if (bot.Combat is { } old) BotPlay.ClearControlledIntent(old);
+                if (bot.Body is { } old) BotPlay.ClearControlledIntent(old);
                 bot.Control = null;
                 _console($"bots MCP: {bot.Name} released to ordinary party AI");
                 return new { botId = bot.CharacterId, released = true };
@@ -113,18 +113,18 @@ sealed partial class BotDirector
             if (action is "attack" or "cast") _ = BotMcpProtocol.Integer(args, "skillId", 1, ushort.MaxValue);
             if (action == "move" || action == "cast" && target == 0)
             { _ = BotMcpProtocol.Integer(args, "x", 0, int.MaxValue); _ = BotMcpProtocol.Integer(args, "y", 0, int.MaxValue); }
-            if (action == "cast" && target != 0 && target != bot.Combat!.Id && target != bot.Leader!.Id
+            if (action == "cast" && target != 0 && target != bot.Body!.Id && target != bot.Leader!.Id
                 && !PartyRoster.Players(bot.Party).Any(c => c.Id == target)
                 && !_bots.Any(b => b.Party == bot.Party && b.Phase == BotPhase.Following && b.PeerId == target))
             {
-                if (!bot.Combat.Area.Monsters.TryGetValue(target, out var hostile) || !hostile.Hostile)
+                if (!bot.Body.Area.Monsters.TryGetValue(target, out var hostile) || !hostile.Hostile)
                     throw new InvalidOperationException("Cast targets are limited to this party and its nearby enemies.");
             }
             if (action == "flask") _ = BotMcpProtocol.Integer(args, "flaskSlot", 1, 5);
             string fingerprint = JsonSerializer.Serialize(new { epoch, action, skill, target, x, y, flask, seconds });
             return lease.Accept(sequence, fingerprint, () =>
             {
-                var player = bot.Combat!;
+                var player = bot.Body!;
                 string command = Guid.NewGuid().ToString("N");
                 BotPlay.QueueControlledIntent(player, new(command, action, player.Frames.Now(player) + seconds,
                     skill, target, x, y, flask, lease.Deadline));
@@ -135,13 +135,13 @@ sealed partial class BotDirector
     }
 
     static bool Ready(Bot b) => PartyRoster.ContainsCompanion(b.Party, b.Account) && Program.GameLogicOrNull is not null && b.Phase == BotPhase.Following && b.Leader is { HasClient: true, Closed: false, LeavingArea: false, Connection.PlayerSent: true }
-        && b.Combat is { Closed: false, LeavingArea: false, Connection.PlayerSent: true } && BotPlay.BodyOf(b.Combat).Prepared
-        && ReferenceEquals(b.Combat.Instance, b.Leader.Instance);
+        && b.Body is { Closed: false, LeavingArea: false, Connection.PlayerSent: true } && BotPlay.BodyOf(b.Body).Prepared
+        && ReferenceEquals(b.Body.Instance, b.Leader.Instance);
 
     static void ExpireControl(Bot bot)
     {
         if (bot.Control is not { Active: false }) return;
-        if (bot.Combat is { } player) BotPlay.ClearControlledIntent(player);
+        if (bot.Body is { } player) BotPlay.ClearControlledIntent(player);
         bot.Control = null;
     }
 }

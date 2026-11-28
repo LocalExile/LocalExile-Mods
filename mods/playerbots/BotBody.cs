@@ -51,6 +51,13 @@ public static partial class BotPlay
 
         async Task Finish()
         {
+            if (player.Frames.Running)
+            {
+                // Run PlayerLeaving on the area's frame so SharedMonsters.LeaveArea emits 0x02bd RemoveObject to viewers.
+                try { await player.Frames.Run(() => GameEvents.RunPlayerLeaving(player, "left")); }
+                catch (Exception) { }
+            }
+            player.Frames.Detach(player);
             try { await updates; } catch (OperationCanceledException) { }
             Program.GameLogicOrNull?.Save(player, prepared: BodyOf(player).Prepared);
             Program.GameLogicOrNull?.Left(player);

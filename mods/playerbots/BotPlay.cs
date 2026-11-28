@@ -8,13 +8,13 @@ namespace GameServer.Modules.PlayerBots;
 // How a bot plays: the game's own rules, run for a player the server drives.
 public static partial class BotPlay
 {
-    public static async Task InitializeControlledPlayer(Player player, Player leader)
+    public static async Task InitializeControlledPlayer(Player player, Player leader, (int X, int Y)? spawnAt = null)
     {
         RegisterVitalsAdmission(player);
         PrepareCharacterForArea(player, player.Pools.Level);
         InitializeCharacterVitals(player);
         BodyOf(player).Prepared = true;
-        var at = ControlledFollowerPoint(player, leader, arrival: true);
+        var at = spawnAt ?? ControlledFollowerPoint(player, leader, arrival: true);
         player.Walk.Teleport(at.X, at.Y, AreaTime(player));
         player.PeerType = InstanceEntities.ObjectTypeHash(SkillsFor(player).ClassFor(player.Character.ClassRow).ObjectType);
         var raw = PlayerForCreation(player);
@@ -23,10 +23,38 @@ public static partial class BotPlay
         player.Connection.PlayerSent = player.Connection.PlayerObjectCreated = true;
         Program.InGame[player] = 0;
         global::HotReload.Register(player);
+        Task Join() => JoinArea(player);
+        if (player.Frames.Running) await player.Frames.Run(Join);
+        else await Join();
+    }
+
+    static async Task JoinArea(Player player)
+    {
+        if (player.Closed) return;
         await PopulateArea(player);
         if (player.Closed) return;
         PublishPlayerPose(player);
+        // Broadcast 0x02bb create peer player + TownStance + equipment to humans already past their first frame
+        // (humans still on their first frame receive this bot via their own JoinArea from PublishPlayerPose above).
+        if (player.Frames.Running && player.Instance.PlayersExcept(player.Id).Any(p => p.HasClient && !p.Frames.WaitingFirstFrame(p)))
+            Program.Joining?.Invoke(player);
         EnsurePlayerUpdates(player);
+    }
+
+    /// <summary>Orders a server-driven player (town visitor or departing bot) to walk to a cell and replicates the walk.</summary>
+    public static async Task<bool> OrderWalk(Player player, (int X, int Y) at)
+    {
+        if (player.Closed || player.LeavingArea || !player.Connection.PlayerSent) return false;
+        bool moved = false;
+        void Run()
+        {
+            if (player.Closed || player.LeavingArea) return;
+            EnsurePlayerUpdates(player);
+            moved = MoveControlledFollower(player, at, AreaTime(player));
+        }
+        if (player.Frames.Running) await player.Frames.Run(Run);
+        else Run();
+        return moved;
     }
 
     public static async Task StepControlledPlayer(Player player, Player leader)

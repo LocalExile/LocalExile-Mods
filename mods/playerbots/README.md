@@ -32,7 +32,10 @@ where they were.
 
 | Setting | Default | |
 |---|---|---|
-| `maxBots` | 100 | bots at most, all towns together |
+| `maxBots` | 100 | bots at most across the whole server |
+| `townBotsMode` | auto | `auto` (scaled from `maxBots`), `custom` (uses `townBots`), or `organic` (life cycle only, no backfill) |
+| `townBots` | 2 to 5 | visiting bots per town in `custom` mode (lower or boosted, capped by `maxBots`) |
+| `persistenceMode` | cycling | `cycling` (retire after Epilogue) or `persistent` (level 1–100 world, endgame Karui Shores, SQLite recovery, no act warping) |
 | `firstSpawnSeconds` | 60 | how long after the Gateway starts the first bot is created |
 | `spawnIntervalSeconds` | 60 | how often a new bot is created, while there are fewer than the most |
 | `league` | Standard | the league of the bots' characters |
@@ -49,18 +52,23 @@ where they were.
 
 - **An account and a character** in the save database: account `<name>_bot`, a random Russian or English character name,
   a random class. Its progress (level, last town) is written to the character record.
-- **A body in towns.** A bot walks the towns where players are, but it is not an entity of their areas, so no client
-  draws it. Party followers instead are players the server drives (LocalExile's `Program.DriveByServer`) on the ordinary
-  combat pipeline.
+- **A visible body in towns and parties.** Whenever a player is in a town, visiting bots materialize there as real
+  server-driven players (LocalExile's `Program.DriveByServer`) wearing their equipped gear in town stance, walking
+  between stashes and NPCs, and despawning cleanly when they leave. Inviting a town bot promotes that live body straight
+  into a party follower on the ordinary combat pipeline; leaving or kicking walks it to the nearest exit before it
+  despawns.
 - **Gear**: real base items of the game data for its class and level (weapon by class, armour by the class's
   attributes, a belt). Party builds include connected passives and compatible linked gems.
 - **The route**: `story-main.md` (the main story, 52 quests) and `story-side.md` (side quests, 30), act by act, main
   quests first; the order is LocalExile's campaign driver's (`scripts/dev/campaign/order.py`). A quest is simulated out
   of sight for `questMinutes`; the zone, kills, deaths and gear changes are logged.
 - **Town visits**: after a quest, a quick visit (out of its own portal by an NPC, hands the quest in, leaves by portal)
-  or a stay (by the stash and the guild stash, a few things to do). Towns keep two to five residents while `maxBots`
-  allows; a bot that finds no room goes on to its next quest.
-- **The end**: after every quest of both guides the character and its account are deleted, and a new bot follows.
+  or a stay (by the stash and the guild stash, a few things to do). In `auto` or `custom` mode, human-occupied towns are
+  filled to their configured count; in `organic` mode, towns fluctuate naturally from the bots' own quest and map cycles.
+- **The end**: in `cycling` mode (default), finishing all 82 quests deletes the character and its account so a new bot
+  follows. In `persistent` mode, characters keep their accounts and move into endgame mapping from Karui Shores up to
+  level 100, never get warped across acts, keep their main inventory/XP on upgrades, and are automatically recovered
+  from SQLite if `bots.json` is missing.
 
 A restart resumes every bot where it was. A bot account carries a mark in place of its password hash (`PlayerBots:`,
 which no real hash holds); a marked account the state file does not know is deleted, and no other account ever is,
