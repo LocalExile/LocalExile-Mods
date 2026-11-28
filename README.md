@@ -45,7 +45,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [liveeconomy](mods/liveeconomy/) | Faustus's Currency Exchange as a live market, at the official Path of Exile leagues' prices |
 | [fastcampaign](mods/fastcampaign/) | a faster campaign: 5× kill experience, +50% movement speed, `/fast` lists the commands that skip ahead |
 | [gm-commands](mods/gm-commands/) | the development and testing chat commands: teleport, items, monsters, experience, test hits, protocol probes |
-| [gm-web](mods/gm-web/) | gm-commands as a browser page at http://127.0.0.1:6111/ (loopback only): pick a command, it runs in game |
+| [gm-web](mods/gm-web/) | gm-commands as a browser page at http://127.0.0.1:6111/ (loopback only): pick a command, it runs in game; snapshots the saves before a command, and searches gems and jewels too |
 | [globalchat](mods/globalchat/) | talk to other LocalExile players through the LocalExile global chat server |
 | [waypoint-tools](mods/waypoint-tools/) | lets Waypoint's tools reach the game without the client control bridge: the item crafter gives its items through it |
 | [equipmentfusion](mods/equipmentfusion/) | automatic attributes and defences from non-weapon native skin transfers; donor gems and skills excluded |

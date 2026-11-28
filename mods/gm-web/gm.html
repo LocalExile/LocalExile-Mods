@@ -27,6 +27,7 @@ h1{margin:0;font-size:20px}
 .tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:3px;margin-right:6px;vertical-align:2px}
 .tag.area{background:#2c4a6e;color:#9cc4ee}.tag.mob{background:#5e2b2b;color:#ee9c9c}.tag.npc{background:#3f5e2f;color:#b6e29c}
 .tag.chest{background:#6e5a24;color:#eeD799}.tag.item{background:#4a3a6e;color:#c4a9ee}
+.tag.gem{background:#1f5a5a;color:#9ce4e4}.tag.jewel{background:#6a4a1f;color:#eecb9c}
 .btns{display:flex;gap:6px;flex:none}
 button{padding:5px 10px;font-size:13px;background:#2a2d33;color:#d8d4c8;border:1px solid #3a3e46;border-radius:5px;cursor:pointer;white-space:nowrap}
 button:hover{border-color:#c9a55c;color:#fff}
@@ -71,8 +72,10 @@ code{background:#22252b;padding:1px 5px;border-radius:3px;font-size:12px}
 #langs{position:absolute;top:14px;right:18px;display:flex;gap:6px}
 .lchip{padding:2px 10px;border-radius:10px;border:1px solid #3a3e46;background:#1e2127;color:#b6b0a2;cursor:pointer;font-size:12px}
 .lchip.on{background:#c9a55c;color:#1b1408;border-color:#c9a55c;font-weight:600}
+#fuse{margin-top:3px;font-size:12px;color:#8a8578;cursor:pointer;user-select:none}
+#fuse:hover{color:#b6b0a2}#fuse b{color:#c9a55c;font-weight:600}
 </style></head><body>
-<header><h1><span data-i18n="title">LocalExile GM 工具</span></h1><div id="counts"></div>
+<header><h1><span data-i18n="title">LocalExile GM 工具</span></h1><div id="counts"></div><div id="fuse"></div>
 <div id="langs"><span class="lchip" data-lang="zh">中</span><span class="lchip" data-lang="en">EN</span></div></header>
 <div id="bar">
   <input id="q" data-i18n-ph="searchPh" placeholder="中文（简/繁）或英文搜索…" autofocus>
@@ -102,7 +105,7 @@ code{background:#22252b;padding:1px 5px;border-radius:3px;font-size:12px}
 <div id="foot"></div>
 <script>
 // ———— i18n ————
-const I18N={"zh":{"title":"LocalExile GM 工具","trade":"交易行 »","searchPh":"搜索英文名：区域 /goto、怪物 /tp /spawn_mob、物品 /item…","cmdPh":"点上面的按钮选命令 →（可编辑）→ 回车或点发送，自动在游戏里生效…","send":"发送","copy":"复制","all":"全部","tpTab":"本图传送","town":" · 城镇","more":"共 {n} 条，只显示前 150 —— 输入更多关键字缩小范围","moreTp":"共 {n} 条，只显示前 300 —— 输入关键字缩小范围","noMatch":"没有匹配项","namesMissing":"名字表由服务器提供（GET /names）：请开服后用 http://127.0.0.1:6111/ 打开本页；命令栏不受影响。","copied":"已复制","pickFirst":"先点上面的按钮选一条命令","copiedFile":"已复制（直发需开服后用 http://127.0.0.1:6111/ 打开本页）","sending":"发送中…","nobody":"没有角色在游戏里，先登录","nobodyShort":"没有角色在游戏","sentOkShort":"已发送 ✓","sendFail":"发送失败：HTTP ","sentOk":"已发送 ✓（结果看游戏内聊天）","noServer":"连不上服务器（服务端开了吗？）","noServerShort":"连不上服务器","onlineYes":"在线：","onlineNo":"服务器已开，还没有角色进游戏","clickSend":"点击直接发送","clickCopy":"点击直接复制","sentPrefix":"已发送：","spawnL":"刷","spectreL":"灵体","tpL":"传送","enterBtn":"进入","enterTitle":"/goto 直接进入该区域","refreshBtn":"刷新","qtyHint":"数量 1-10","tpqPh":"过滤当前区域目标：中文名 / 英文名 / 坐标…","tpNeedServed":"本图传送需要直发模式：开服后用 http://127.0.0.1:6111/ 打开本页","loading":"加载中…","tpNobody":"没有角色在游戏里，登录后点「刷新」","curArea":"当前区域","seedL":"种子","meL":"我","truncated":"物件过多，只列前 800","kAll":"全部","kMonster":"怪物","kNpc":"NPC","kTransition":"出口","kWaypoint":"传送点","kArrival":"出生点","kObject":"物件","fpTitle":"快捷操作（一键生效）","fpNote":"直发模式点击即执行，结果看游戏内聊天；虚线按钮=填入命令栏补参数","fillNote":"已填入命令栏，补参数后回车发送","helpTitle":"常用命令速查（点开）","foot":"本页随 gm-web mod 附带 · 直发模式：开服后用 http://127.0.0.1:6111/ 打开"},"en":{"title":"LocalExile GM Tool","trade":"Trade »","searchPh":"Search EN names: areas /goto, monsters /tp /spawn_mob, items /item…","cmdPh":"Pick a command with the buttons above → (editable) → Enter or Send runs it in game…","send":"Send","copy":"Copy","all":"All","tpTab":"In-area TP","town":" · town","more":"{n} matches, showing the first 150 — type more to narrow down","moreTp":"{n} matches, showing the first 300 — type a keyword to narrow down","noMatch":"No matches","namesMissing":"The name tables come from the server (GET /names): open this page from a running server at http://127.0.0.1:6111/; the command bar keeps working.","copied":"Copied","pickFirst":"Pick a command button above first","copiedFile":"Copied (open this page from the server at http://127.0.0.1:6111/ to send directly)","sending":"Sending…","nobody":"Nobody is in game — log in first","nobodyShort":"nobody in game","sentOkShort":"Sent ✓","sendFail":"Send failed: HTTP ","sentOk":"Sent ✓ (see the in-game chat)","noServer":"Cannot reach the server — is it running?","noServerShort":"server unreachable","onlineYes":"Online: ","onlineNo":"Server is up, nobody has entered the game yet","clickSend":"click to send directly","clickCopy":"click to copy directly","sentPrefix":"sent: ","spawnL":"spawn","spectreL":"spectre","tpL":"TP","enterBtn":"Enter","enterTitle":"/goto straight into that area","refreshBtn":"Refresh","qtyHint":"qty 1-10","tpqPh":"Filter targets: CN name / EN name / coords…","tpNeedServed":"In-area TP needs the served page: open http://127.0.0.1:6111/ with the server running","loading":"Loading…","tpNobody":"Nobody is in game — log in, then Refresh","curArea":"Current area","seedL":"seed","meL":"me","truncated":"too many objects — first 800 shown","kAll":"All","kMonster":"Monster","kNpc":"NPC","kTransition":"Exit","kWaypoint":"Waypoint","kArrival":"Spawn","kObject":"Object","fpTitle":"Quick actions","fpNote":"Served mode: one click runs it, results in the in-game chat; dashed buttons fill the command bar for parameters","fillNote":"Filled into the command bar — add parameters, then press Enter","helpTitle":"Common commands (click to open)","foot":"this page ships with the gm-web mod · open it from the running server at http://127.0.0.1:6111/ · names via GET /names"}};
+const I18N={"zh":{"title":"LocalExile GM 工具","trade":"交易行 »","searchPh":"搜索英文名：区域 /goto、怪物 /tp /spawn_mob、物品 /item、宝石 /gem、珠宝 /unique_jewel…","cmdPh":"点上面的按钮选命令 →（可编辑）→ 回车或点发送，自动在游戏里生效…","send":"发送","copy":"复制","all":"全部","tpTab":"本图传送","town":" · 城镇","more":"共 {n} 条，只显示前 150 —— 输入更多关键字缩小范围","moreTp":"共 {n} 条，只显示前 300 —— 输入关键字缩小范围","noMatch":"没有匹配项","namesMissing":"名字表由服务器提供（GET /names）：请开服后用 http://127.0.0.1:6111/ 打开本页；命令栏不受影响。","copied":"已复制","pickFirst":"先点上面的按钮选一条命令","copiedFile":"已复制（直发需开服后用 http://127.0.0.1:6111/ 打开本页）","sending":"发送中…","nobody":"没有角色在游戏里，先登录","nobodyShort":"没有角色在游戏","sentOkShort":"已发送 ✓","sendFail":"发送失败：HTTP ","sentOk":"已发送 ✓（结果看游戏内聊天）","noServer":"连不上服务器（服务端开了吗？）","noServerShort":"连不上服务器","onlineYes":"在线：","onlineNo":"服务器已开，还没有角色进游戏","clickSend":"点击直接发送","clickCopy":"点击直接复制","sentPrefix":"已发送：","spawnL":"刷","spectreL":"灵体","tpL":"传送","enterBtn":"进入","enterTitle":"/goto 直接进入该区域","refreshBtn":"刷新","qtyHint":"数量 1-10","tpqPh":"过滤当前区域目标：中文名 / 英文名 / 坐标…","tpNeedServed":"本图传送需要直发模式：开服后用 http://127.0.0.1:6111/ 打开本页","loading":"加载中…","tpNobody":"没有角色在游戏里，登录后点「刷新」","curArea":"当前区域","seedL":"种子","meL":"我","truncated":"物件过多，只列前 800","kAll":"全部","kMonster":"怪物","kNpc":"NPC","kTransition":"出口","kWaypoint":"传送点","kArrival":"出生点","kObject":"物件","fpTitle":"快捷操作（一键生效）","fpNote":"直发模式点击即执行，结果看游戏内聊天；虚线按钮=填入命令栏补参数","gemLvl":"宝石等级","gemQual":"宝石品质","fuseOff":"保险丝：关（不发快照）","fuseNone":"保险丝：还没拍过快照，点这里拍一张","fuseAt":"保险丝：","fuseReuse":"复用中，还剩 ","fuseGone":"窗口已过，下一条指令会重新拍","fuseMin":" 分钟","fuseSnapped":"已拍快照","fuseFail":"快照失败：","fuseHint":"发指令前自动给存档拍一张快照；点这里立刻拍一张","fillNote":"已填入命令栏，补参数后回车发送","helpTitle":"常用命令速查（点开）","foot":"本页随 gm-web mod 附带 · 直发模式：开服后用 http://127.0.0.1:6111/ 打开"},"en":{"title":"LocalExile GM Tool","trade":"Trade »","searchPh":"Search EN names: areas /goto, monsters /tp /spawn_mob, items /item, gems /gem, jewels /unique_jewel…","cmdPh":"Pick a command with the buttons above → (editable) → Enter or Send runs it in game…","send":"Send","copy":"Copy","all":"All","tpTab":"In-area TP","town":" · town","more":"{n} matches, showing the first 150 — type more to narrow down","moreTp":"{n} matches, showing the first 300 — type a keyword to narrow down","noMatch":"No matches","namesMissing":"The name tables come from the server (GET /names): open this page from a running server at http://127.0.0.1:6111/; the command bar keeps working.","copied":"Copied","pickFirst":"Pick a command button above first","copiedFile":"Copied (open this page from the server at http://127.0.0.1:6111/ to send directly)","sending":"Sending…","nobody":"Nobody is in game — log in first","nobodyShort":"nobody in game","sentOkShort":"Sent ✓","sendFail":"Send failed: HTTP ","sentOk":"Sent ✓ (see the in-game chat)","noServer":"Cannot reach the server — is it running?","noServerShort":"server unreachable","onlineYes":"Online: ","onlineNo":"Server is up, nobody has entered the game yet","clickSend":"click to send directly","clickCopy":"click to copy directly","sentPrefix":"sent: ","spawnL":"spawn","spectreL":"spectre","tpL":"TP","enterBtn":"Enter","enterTitle":"/goto straight into that area","refreshBtn":"Refresh","qtyHint":"qty 1-10","tpqPh":"Filter targets: CN name / EN name / coords…","tpNeedServed":"In-area TP needs the served page: open http://127.0.0.1:6111/ with the server running","loading":"Loading…","tpNobody":"Nobody is in game — log in, then Refresh","curArea":"Current area","seedL":"seed","meL":"me","truncated":"too many objects — first 800 shown","kAll":"All","kMonster":"Monster","kNpc":"NPC","kTransition":"Exit","kWaypoint":"Waypoint","kArrival":"Spawn","kObject":"Object","fpTitle":"Quick actions","fpNote":"Served mode: one click runs it, results in the in-game chat; dashed buttons fill the command bar for parameters","gemLvl":"gem level","gemQual":"gem quality","fuseOff":"Fuse: off (no snapshots)","fuseNone":"Fuse: no snapshot yet, click here to take one","fuseAt":"Fuse: ","fuseReuse":"reused for another ","fuseGone":"window passed, the next command snapshots again","fuseMin":" min","fuseSnapped":"Snapshot taken","fuseFail":"Snapshot failed: ","fuseHint":"Takes a snapshot of the saves before a command is run; click here to take one now","fillNote":"Filled into the command bar — add parameters, then press Enter","helpTitle":"Common commands (click to open)","foot":"this page ships with the gm-web mod · open it from the running server at http://127.0.0.1:6111/ · names via GET /names"}};
 const UP=true;
 const urlLang=new URLSearchParams(location.search).get('lang');
 let LANG=urlLang==='zh'||urlLang==='en'?urlLang:localStorage.getItem('lang')||((navigator.language||'zh').toLowerCase().startsWith('zh')?'zh':'en');
@@ -113,7 +116,8 @@ const LIST=document.getElementById('list'),Q=document.getElementById('q'),
       CHIPS=document.getElementById('chips'),COUNTS=document.getElementById('counts'),
       CMD=document.getElementById('cmd'),SEND=document.getElementById('send'),STATUS=document.getElementById('status');
 let type='all';
-const TYPES=[["area","区域","Areas"],["mob","怪物","Monsters"],["item","物品","Items"]];
+const TYPES=[["area","区域","Areas"],["mob","怪物","Monsters"],["item","物品","Items"],
+             ["gem","宝石","Gems"],["jewel","珠宝","Jewels"]];
 const tLabel=k=>{const x=TYPES.find(e=>e[0]===k);return x?L(x[1],x[2]):k};
 let D=null;
 const MOBCN={},NPCCN={},AREACN={},CHESTCN={};
@@ -149,6 +153,11 @@ function rowBtns(ty,e){
     snd(`data-cmd="${esc('/goto '+e[3])}" title="/goto"`);
   if(ty==='npc')return `<button data-cmd="${esc('/tp '+e[2])}">/tp</button>`;
   if(ty==='chest')return `<button data-cmd="${esc('/tp '+e[3])}">/tp</button>`;
+  if(ty==='gem')return `<input class="rqty" data-gemlvl type="number" value="20" min="1" max="40" title="${esc(t('gemLvl'))}">`+
+    `<input class="rqty" data-gemqual type="number" value="0" min="0" max="23" title="${esc(t('gemQual'))}">`+
+    `<button data-gem="${esc(e[3])}" title="${esc(e[4])}">/gem</button>`+snd(`data-gem="${esc(e[3])}" title="${esc(e[4])}"`);
+  if(ty==='jewel')return `<button data-cmd="${esc(e[4])}" title="${esc(e[4])}">${esc(e[4].split(' ')[0])}</button>`+
+    snd(`data-cmd="${esc(e[4])}" title="${esc(e[4])}"`);
   const give=UP?'/item':'/give';
   return qtyCtl([1,10,40,100])+`<button data-give="${esc(e[3])}">${give}</button>`+
     snd(`data-give="${esc(e[3])}" title="${give}"`);
@@ -183,6 +192,10 @@ LIST.onclick=e=>{
   let full=b.dataset.cmd;
   if(b.dataset.give)full=(UP?'/item ':'/give ')+b.dataset.give+' '+n;
   else if(b.dataset.spectre)full='/spectres add '+b.dataset.spectre+(n>1?' '+Math.min(n,10):'');
+  else if(b.dataset.gem){const row=b.closest('.row');
+    const lv=Math.max(1,Math.min(40,parseInt(row.querySelector('[data-gemlvl]').value,10)||20));
+    const qu=Math.max(0,Math.min(23,parseInt(row.querySelector('[data-gemqual]').value,10)||0));
+    full='/gem '+b.dataset.gem+' '+lv+' '+qu;}
   if(b.classList.contains('send')){runNow(full,b);return;}
   CMD.value=full;
   if(!SERVED)copy(full,b);else CMD.focus();};
@@ -204,6 +217,7 @@ async function send(){
     if(r.status===503){status(t('nobody'),'err');return;}
     if(!r.ok){status(t('sendFail')+r.status,'err');return;}
     status(t('sentOk'),'ok');
+    refreshFuse();
   }catch(_){status(t('noServer'),'err');}
 }
 SEND.onclick=send;CMD.onkeydown=e=>{if(e.key==='Enter')send();};
@@ -213,6 +227,7 @@ async function runNow(cmd,btn){
     const r=await fetch('/run',{method:'POST',body:cmd});
     btn.textContent=r.status===503?t('nobodyShort'):r.ok?t('sentOkShort'):'HTTP '+r.status;
     if(r.ok)status(t('sentPrefix')+cmd,'ok');
+    refreshFuse();
   }catch(_){btn.textContent=t('noServerShort');status(t('noServer'),'err');}
   setTimeout(()=>{btn.textContent=old;btn.disabled=false;},1200);
 }
@@ -296,6 +311,33 @@ document.getElementById('fpgroups').onclick=e=>{const b=e.target.closest('button
 const HELP=[["<code>/goto &lt;area id or name&gt; [seed]<\/code>","跨图传送（本页「区域」类直达；带种子开新副本）","Cross-area teleport (the page’s Areas tab jumps straight there; a seed opens a fresh instance)"],["<code>/tp &lt;x y | +dx +dy | id | name [n] | list [filter]&gt;<\/code>","图内传送：<b>本页「本图传送」面板<\/b>列出当前区域全部目标（怪物/NPC/出口/传送点/物件，含 Boss）点击直达；游戏内 <code>/tp list<\/code> 也可列","In-area teleport: the <b>In-area TP panel<\/b> lists every target of the current area (monsters/NPCs/exits/waypoints/objects, bosses included) — one click jumps; in-game <code>/tp list<\/code> lists too"],["<code>/spawn_mob &lt;名&gt;[@等级] [friendly] [normal|magic|rare|unique] [自定义名]<\/code>","身边刷一只怪（friendly=友方；等级写在 @ 后）","Spawns one mob beside you (friendly = on your team; the level goes after @)"],["<code>/item &lt;名&gt; [数量] [magic|rare] [max]<\/code>","发物品；本页「物品」按钮直接发英文名+数量；max=满roll","Gives an item; the page’s Items tab sends the English name + count; max = as well rolled as it can be"],["<code>/gem &lt;名&gt; [等级] [品质]<\/code>","造宝石到指定等级品质","A gem into the inventory at that level and quality"],["<code>/gem_xp &lt;数量|near&gt;<\/code>","背包+已插宝石的经验；near=差一点到下一级","Experience for every backpack and socketed gem; near = one below the next level"],["<code>/item_mods<\/code> · <code>/item_max<\/code> · <code>/roll &lt;magic|rare&gt;<\/code> · <code>/rarity<\/code> · <code>/sockets<\/code> · <code>/item_state<\/code>","手持物品工艺（先在游戏里拿在手上）","Held-item crafting (hold the item in game first)"],["<code>/unique_jewel &lt;名&gt; | list<\/code>","全局传奇珠宝（满roll）","A global unique jewel, max-rolled"],["<code>/set_level &lt;1-100&gt;<\/code> · <code>/add_xp<\/code> · <code>/gold &lt;数&gt;<\/code> · <code>/add_passive_points &lt;n&gt;<\/code> · <code>/reset_passives<\/code>","角色调整","Character adjustments"],["<code>/ascendancy [名]<\/code> · <code>/ascendancy_points &lt;normal|cruel|merciless|eternal|all&gt;<\/code> · <code>/reset_ascendancy<\/code> · <code>/trials [on|off]<\/code> · <code>/lab_layout<\/code>","升华/迷宫","Ascendancy and the Labyrinth"],["<code>/waypoints [all|reset]<\/code> · <code>/atlas_points [n]<\/code> · <code>/quest_preset &lt;id&gt;<\/code>","传送点/异界点数/任务预设","Waypoints, Atlas points, quest presets"],["<code>/kill &lt;id | 名 [n] | boss | near [半径] | all&gt;<\/code>","按正常死亡路径杀怪（经验/掉落/任务进度都有）","Kills monsters through the normal death path (experience, drops, quest progress)"],["<code>/mobs<\/code> · <code>/npcs<\/code> · <code>/despawn [all|id]<\/code> · <code>/ai [on|off]<\/code>","本图怪物/NPC 管理","Area monster and NPC management"],["<code>/god [on|off|immune]<\/code> · <code>/heal<\/code> · <code>/charges<\/code> · <code>/auras [off &lt;名&gt;]<\/code>","战斗状态","Combat state"],["<code>/resistances<\/code> · <code>/defences<\/code> · <code>/crit<\/code> · <code>/block<\/code> · <code>/suppression<\/code> · <code>/accuracy<\/code>","面板查询（只读）","Stat queries (read-only)"],["<code>/set_speed &lt;百分比&gt;|off<\/code> · <code>/set_aoe &lt;百分比&gt;|off<\/code>","本图移速/范围加成（off 恢复）","This-area movement speed and area of effect (off restores)"]];
 function renderHelp(){
   document.getElementById('helptbl').innerHTML=HELP.map(r=>`<tr><td>${r[0]}</td><td>${L(r[1],r[2])}</td></tr>`).join('');}
+// ———— 保险丝：GET /ping 报的最近一张快照（mod 给的是秒，面板当分钟用，所以这里除以 60） ————
+const FUSE=document.getElementById('fuse');
+const shortMin=v=>v>=10?Math.round(v):Math.round(v*10)/10;
+function drawFuse(j){
+  const f=(j&&j.fuse)||null;
+  FUSE.title=t('fuseHint');
+  if(!f||!f.on){FUSE.innerHTML='<b>'+esc(t('fuseOff'))+'</b>';return;}
+  if(!f.stamp){FUSE.innerHTML='<b>'+esc(t('fuseAt'))+'</b>'+esc(t('fuseNone'));return;}
+  const age=Math.max(0,(f.age||0)/60), win=(f.window||0)/60, left=win>0?Math.max(0,win-age):0;
+  const when=left>0?t('fuseReuse')+shortMin(left)+t('fuseMin'):t('fuseGone');
+  FUSE.innerHTML='<b>'+esc(t('fuseAt'))+'</b>'+esc(f.stamp)+' · '+esc(when);
+}
+async function refreshFuse(){
+  if(!SERVED){FUSE.textContent='';return;}
+  try{const r=await fetch('/ping');drawFuse(r.ok?await r.json():null);}
+  catch(_){FUSE.textContent='';}
+}
+FUSE.onclick=async()=>{
+  if(!SERVED)return;
+  try{
+    const r=await fetch('/fuse',{method:'POST'});
+    const j=await r.json();
+    if(j.ok)status(t('fuseSnapped')+' · '+(j.bytes/1048576).toFixed(1)+' MB','ok');
+    else status(t('fuseFail')+j.error,'err');
+    refreshFuse();
+  }catch(_){status(t('noServer'),'err');}
+};
 // ———— 初始化 ————
 Q.oninput=render;
 applyUI();renderChips();renderQuick();renderHelp();renderPanel();renderTpChips();updateCounts();
@@ -305,6 +347,7 @@ else if(SERVED)fetch('/names').then(r=>r.ok?r.json():null).then(j=>{
   else namesMissing();}).catch(namesMissing);
 else namesMissing();
 render();
+refreshFuse();setInterval(refreshFuse,15000);
 if(SERVED)fetch('/online').then(r=>r.text()).then(n=>status(n?t('onlineYes')+n:t('onlineNo'),''))
   .catch(()=>status(t('noServer'),'err'));
 document.getElementById('foot').textContent=t('foot');

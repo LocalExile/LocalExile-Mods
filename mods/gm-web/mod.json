@@ -1,9 +1,9 @@
 {
   "id": "gm-web",
   "name": "GM Web Tool",
-  "description": "Serves the GM commands page at http://127.0.0.1:6111/ (loopback only): pick a command in the browser and it runs in game.",
+  "description": "Serves the GM commands page at http://127.0.0.1:6111/ (loopback only): pick a command in the browser and it runs in game. Snapshots the saves before the first command of a window, and the page searches gems and jewels as well as areas, monsters and items.",
   "author": "cjjlovedsn",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "compatibleClientVersions": [
     "0.6.0-beta",
     "0.6.1-beta"
