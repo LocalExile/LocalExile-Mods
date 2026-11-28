@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using GameServer.Modding;
 
 namespace LocalExile.Mods.GmWeb;
@@ -8,13 +9,36 @@ namespace LocalExile.Mods.GmWeb;
 /// Serves the GM command page at http://127.0.0.1:6111/ and runs the commands its buttons pick on the player in
 /// game, so picking a command in the browser takes effect without typing it in the client's chat. Loopback only,
 /// one machine's own page; a request body that is not a slash command is refused.
+///
+/// Before the first command of a window is run, the saves are snapshotted (Backup.cs), so a command that goes wrong
+/// can be undone: the fuse. <c>GET /ping</c> reports the fuse's state for the page's header, and <c>POST /fuse</c>
+/// takes a snapshot on demand.
 /// </summary>
 public sealed class GmWebMod : IMod, IDisposable
 {
-    const int Port = 6111;
+    const string Version = "1.0.1";
+
+    /// <summary>Settings (settings.json). The port is a setting so a second page can run beside this one.</summary>
+    sealed record Choices(int Port, bool Fuse, int FuseMinutes, int Keep);
+
+    static Choices Clamp(Choices c) => c with
+    {
+        Port = Math.Clamp(c.Port, 1024, 65535),
+        FuseMinutes = Math.Clamp(c.FuseMinutes, 0, 1440),
+        Keep = Math.Clamp(c.Keep, 1, 200),
+    };
+
+    IModContext mod = null!;
+    Choices choices = new(6111, true, 10, 12);
     CancellationTokenSource? _stopping;
     TcpListener? _listener;
     string? _folder;
+
+    DateTime _fuseAt = DateTime.MinValue;
+    string _fuseStamp = "";
+    long _fuseBytes;
+
+    int Port => choices.Port;
 
     /// <inheritdoc/>
     public void Dispose()
@@ -27,15 +51,17 @@ public sealed class GmWebMod : IMod, IDisposable
     }
 
     /// <inheritdoc/>
-    public void Load(IModContext mod)
+    public void Load(IModContext context)
     {
-        _folder = mod.Folder;
+        mod = context;
+        _folder = context.Folder;
+        choices = Clamp(context.Settings<Choices>());
         _stopping = new();
         var listener = new TcpListener(System.Net.IPAddress.Loopback, Port);
         try { listener.Start(); }
         catch (SocketException e)
         {
-            Console.WriteLine($"[gm-web] cannot listen on 127.0.0.1:{Port}: {e.Message}");
+            context.Log($"cannot listen on 127.0.0.1:{Port}: {e.Message}");
             return;
         }
         _listener = listener;
@@ -75,8 +101,9 @@ public sealed class GmWebMod : IMod, IDisposable
             // Only this page may call in: a Host other than our own is a DNS-rebinding page, and a browser marks a POST
             // from another site with its Origin, so a site the player visits cannot run commands in game.
             string? host = Header(head, "Host"), origin = Header(head, "Origin");
-            if (host is not ("127.0.0.1:6111" or "localhost:6111")
-                || method == "POST" && origin is not (null or "http://127.0.0.1:6111" or "http://localhost:6111"))
+            string hostOwn = $"127.0.0.1:{Port}", hostAlias = $"localhost:{Port}";
+            if (host is null || host != hostOwn && host != hostAlias
+                || method == "POST" && origin is not null && origin != "http://" + hostOwn && origin != "http://" + hostAlias)
             { await Write(stream, 403, "text/plain", "forbidden"u8.ToArray()); return; }
             byte[] body = BodyAfter(request);
             if (method == "GET" && path is "/" or "/index.html")
@@ -94,32 +121,122 @@ public sealed class GmWebMod : IMod, IDisposable
                 await Write(stream, 200, "text/plain; charset=utf-8",
                     Encoding.UTF8.GetBytes(player?.Character.Name ?? ""));
             }
+            else if (method == "GET" && path == "/ping")
+                await Write(stream, 200, "application/json; charset=utf-8", PingJson());
+            else if (method == "POST" && path == "/fuse")
+                await Write(stream, 200, "application/json; charset=utf-8", FuseNow());
             else if (method == "GET" && path is "/tp" or "/tp/")
                 await TpApi.Handle(stream, method);
             else if (method == "GET" && path is "/names" or "/names/")
                 await NamesApi.Handle(stream, method);
             else if (method == "POST" && path == "/run")
-            {
-                string command = Encoding.UTF8.GetString(body).Trim();
-                if (!command.StartsWith('/')) { await Write(stream, 400, "text/plain; charset=utf-8", "not a command"u8.ToArray()); return; }
-                var player = OnlinePlayer();
-                if (player is null) { await Write(stream, 503, "text/plain; charset=utf-8", "nobody is in game"u8.ToArray()); return; }
-                // The typed-chat path rebuilds the connection's table for every command (a mod reload empties it,
-                // Program.ForgetCommands); build the same table here, so a run right after a reload works too. The
-                // frames gate keeps this from racing a frame (AreaFrames.Run), and the reply reaches the chat as usual.
-                await player.Frames.Run(async () =>
-                {
-                    var commands = Program.Commands(player);
-                    player.Commands = commands;
-                    await commands.RunAsync(command);
-                });
-                await Write(stream, 200, "text/plain; charset=utf-8", "ok"u8.ToArray());
-            }
+                await Run(stream, Encoding.UTF8.GetString(body));
             else await Write(stream, 404, "text/plain", "not found"u8.ToArray());
         }
         catch (Exception e) when (e is IOException or SocketException or ObjectDisposedException) { }
+        catch (Exception e) { mod?.Log("request failed: " + e.Message); }
         finally { try { client.Close(); } catch (SocketException) { } }
     }
+
+    // ---- running a command ---------------------------------------------------------------------------------------
+
+    async Task Run(NetworkStream stream, string command)
+    {
+        command = command.Trim();
+        if (!command.StartsWith('/'))
+        {
+            await Write(stream, 400, "application/json; charset=utf-8",
+                Json(new { ok = false, error = "not a command" }));
+            return;
+        }
+        var player = OnlinePlayer();
+        if (player is null)
+        {
+            await Write(stream, 503, "application/json; charset=utf-8",
+                Json(new { ok = false, error = "nobody is in game" }));
+            return;
+        }
+
+        // The fuse: one snapshot per window, before anything is run. A snapshot that fails does not stop the command
+        // -- it is reported instead, so a broken backup cannot lock the panel.
+        string fuse = "off";
+        if (choices.Fuse)
+        {
+            if (choices.FuseMinutes <= 0 || DateTime.UtcNow - _fuseAt > TimeSpan.FromMinutes(choices.FuseMinutes))
+            {
+                var taken = Backup.Take(choices.Keep);
+                if (taken.Ok) { _fuseAt = DateTime.UtcNow; _fuseStamp = taken.Stamp; _fuseBytes = taken.Bytes; fuse = "fresh"; }
+                else { fuse = "failed"; mod.Log("fuse: snapshot failed: " + taken.Error); }
+            }
+            else fuse = "reused";
+        }
+
+        // The typed-chat path rebuilds the connection's table for every command (a mod reload empties it,
+        // Program.ForgetCommands); build the same table here, so a run right after a reload works too. The
+        // frames gate keeps this from racing a frame (AreaFrames.Run), and the reply reaches the chat as usual.
+        await player.Frames.Run(async () =>
+        {
+            var commands = Program.Commands(player);
+            player.Commands = commands;
+            await commands.RunAsync(command);
+        });
+
+        await Write(stream, 200, "application/json; charset=utf-8",
+            Json(new { ok = true, ran = command, fuse, stamp = _fuseStamp, game = GameName() }));
+    }
+
+    // ---- the fuse ------------------------------------------------------------------------------------------------
+
+    byte[] FuseNow()
+    {
+        var taken = Backup.Take(choices.Keep);
+        if (!taken.Ok) return Json(new { ok = false, error = taken.Error });
+        _fuseAt = DateTime.UtcNow;
+        _fuseStamp = taken.Stamp;
+        _fuseBytes = taken.Bytes;
+        return Json(new
+        {
+            ok = true,
+            stamp = taken.Stamp,
+            bytes = taken.Bytes,
+            seconds = Math.Round(taken.Seconds, 2),
+            where = Backup.Folder(),
+        });
+    }
+
+    byte[] PingJson()
+    {
+        bool has = _fuseStamp.Length > 0;
+        double age = has ? (DateTime.UtcNow - _fuseAt).TotalSeconds : -1;
+        return Json(new
+        {
+            ok = true,
+            version = 2,
+            port = Port,
+            mod = Version,
+            game = GameName(),
+            fuse = new
+            {
+                on = choices.Fuse,
+                strict = false,
+                stamp = has ? _fuseStamp : null,
+                age,
+                window = choices.FuseMinutes * 60,
+                bytes = _fuseBytes,
+                where = Backup.Folder(),
+            },
+        });
+    }
+
+    static string? GameName()
+    {
+        var player = OnlinePlayer();
+        return player is null ? null : $"Path of Exile ({player.Character.Name})";
+    }
+
+    static byte[] Json(object value) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value));
+
+    // ---- plumbing ------------------------------------------------------------------------------------------------
 
     /// <summary>One request's head and body: reads until the head's blank line, then Content-Length bytes more.</summary>
     static async Task<string?> ReadRequest(NetworkStream stream)
