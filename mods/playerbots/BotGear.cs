@@ -1,19 +1,10 @@
 using GameServer.Core.Accounts;
-using GameServer.Core.Protocol.Instance;
 
 namespace GameServer.Modules.PlayerBots;
 
-/// <summary>What a bot wears: real base items of the game data (BaseItemTypes) a character of its class and level would
-/// use, drawn on its model as the server draws a player's equipment (Equipment.Looks: the inventory row's model slot,
-/// the base's ItemVisualIdentity, stance and class; a bow as BowSetup records it).</summary>
+/// <summary>Fallback base-item selection (used when GameLogic is absent) and gear descriptions for bot logs.</summary>
 static class BotGear
 {
-    // Model slots (PlayerInventories.VisibleSlots): main hand 0, off hand 1, body 2, helmet 4, gloves 5, boots 6, belt 10.
-    const byte MainHand = 0, OffHand = 1, Body = 2, Helmet = 4, Gloves = 5, Boots = 6, Belt = 10, Back = 7;
-    static readonly byte[] Slots = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11];
-    const ushort DefaultArrow = 0xb2f6, DefaultQuiver = 0x328b;
-    const byte NoWeaponType = 0x68, NoStance = 0xff;
-
     // The weapons a class is played with: (main hand classes, off hand class or null).
     static readonly Dictionary<CharacterClass, (string[] Main, string? Off)[]> Weapons = new()
     {
@@ -59,36 +50,6 @@ static class BotGear
                 && (tag is null || t.Tags.Contains(tag) || !t.Tags.Any(g => g.EndsWith("_armour", StringComparison.Ordinal) || g.EndsWith("_shield", StringComparison.Ordinal))))
             .OrderByDescending(t => t.DropLevel).Take(2).ToList();
         return fitting.Count == 0 ? null : fitting[random.Next(fitting.Count)];
-    }
-
-    /// <summary>The model's entries for the gear, every visible slot (an empty one where nothing is worn).</summary>
-    public static IReadOnlyList<VisibleItem> Looks(IReadOnlyList<string> gear)
-    {
-        var looks = Slots.ToDictionary(s => s, VisibleItem.Empty);
-        var types = gear.Select(id => Program.Items.All.FirstOrDefault(t => t.Id == id)).Where(t => t is not null).Select(t => t!).ToList();
-        bool firstHand = true;
-        foreach (var t in types)
-        {
-            var look = new VisibleItem(0, t.VisualIdentity, t.Stance, t.ClassRow is >= 0 and < 255 ? (byte)(t.ClassRow + 1) : (byte)1);
-            byte? slot = t.Class switch
-            {
-                "Helmet" => Helmet, "Body Armour" => Body, "Gloves" => Gloves, "Boots" => Boots, "Belt" => Belt,
-                "Shield" => OffHand,
-                _ when firstHand => MainHand,
-                _ => OffHand,
-            };
-            if (slot is MainHand) firstHand = false;
-            if (t.Class == "Bow")
-            {
-                // Held in the left hand, an arrow in the right, the quiver on the back (BowSetup).
-                looks[MainHand] = new VisibleItem(MainHand, DefaultArrow) { Type = look.Type, Stance = t.Stance };
-                looks[OffHand] = new VisibleItem(OffHand, t.VisualIdentity) { Type = NoWeaponType, Stance = NoStance };
-                looks[Back] = new VisibleItem(Back, DefaultQuiver) { Type = NoWeaponType, Stance = NoStance };
-                continue;
-            }
-            looks[slot.Value] = look with { Slot = slot.Value };
-        }
-        return [.. looks.OrderBy(e => e.Key).Select(e => e.Value)];
     }
 
     /// <summary>The gear's names for the log.</summary>

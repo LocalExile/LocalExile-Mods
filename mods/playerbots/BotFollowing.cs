@@ -1,3 +1,4 @@
+using GameServer.Core.Protocol.Instance;
 using GameServer.Core.World;
 
 using static Game;
@@ -7,6 +8,7 @@ namespace GameServer.Modules.PlayerBots;
 // How a bot plays: the game's own rules, run for a player the server drives.
 public static partial class BotPlay
 {
+    const ushort MoveSkillId = 0x2909;
     public const double ControlledFollowerLeash = 60;
     static readonly Store<Player, ControlledFollowing> FollowerPlans = new();
     sealed class ControlledFollowing
@@ -75,6 +77,9 @@ public static partial class BotPlay
             plan.FarSince = double.NaN;
             ScheduleControlledIdle(player, plan, now);
             PublishPlayerPose(player);
+            if (player.Area.Owned)
+                Program.ToArea(player, InstanceProtocol.Teleport(player.Id, at.X, at.Y, 0x7fffffff),
+                    $"0x01b7 bot teleport to ({at.X}, {at.Y})", except: player);
             Console.WriteLine($"[bots] {Program.CharacterName(player)} returns to leader: {distance:0.0} cells -> ({at.X}, {at.Y})");
             return true;
         }
@@ -180,8 +185,11 @@ public static partial class BotPlay
         Interlocked.Increment(ref player.ActionCount);
         Interlocked.Increment(ref player.ChannelGeneration);
         player.ChannelSkill = 0;
-        player.Walk.Order(at.X, at.Y, now);
+        var from = player.Walk.Order(at.X, at.Y, now);
         PublishPlayerPose(player);
+        if (player.Area.Owned)
+            Program.ToArea(player, InstanceProtocol.ActionStarted(player.Id, from.X, from.Y, at.X, at.Y, MoveSkillId, 0xffff, 0x0408),
+                $"0x01ab bot move to ({at.X}, {at.Y})", except: player);
         return true;
     }
 }
