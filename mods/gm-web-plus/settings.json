@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "settings": {
+    "port": {
+      "type": "integer",
+      "default": 6111,
+      "min": 1024,
+      "max": 65535,
+      "label": "Port",
+      "description": "The page is served on this loopback port. Set another one to run beside gm-web, which serves 6111 by default, and open http://127.0.0.1:<port>/."
+    },
+    "fuse": {
+      "type": "bool",
+      "default": true,
+      "label": "Snapshot before a command",
+      "description": "Take a snapshot of the saves before the first command is run, and reuse it. /fuse takes one on demand either way."
+    },
+    "fuseMinutes": {
+      "type": "integer",
+      "default": 10,
+      "min": 0,
+      "max": 1440,
+      "label": "Reuse a snapshot for",
+      "unit": "minutes",
+      "description": "How long one snapshot serves the commands that follow it, so a queue of twenty commands writes one file instead of twenty. 0 snapshots before every command."
+    },
+    "keep": {
+      "type": "integer",
+      "default": 12,
+      "min": 1,
+      "max": 200,
+      "label": "Snapshots to keep",
+      "description": "Older snapshots are removed beyond this many. Each one is about 1.8 MB."
+    }
+  }
+}

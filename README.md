@@ -46,6 +46,7 @@ works with. The maintainers publish the releases of the mods in this repository.
 | [fastcampaign](mods/fastcampaign/) | a faster campaign: 5× kill experience, +50% movement speed, `/fast` lists the commands that skip ahead |
 | [gm-commands](mods/gm-commands/) | the development and testing chat commands: teleport, items, monsters, experience, test hits, protocol probes |
 | [gm-web](mods/gm-web/) | gm-commands as a browser page at http://127.0.0.1:6111/ (loopback only): pick a command, it runs in game |
+| [gm-web-plus](mods/gm-web-plus/) | the same page with a save snapshot before the first command (`/fuse` on demand), a 144-card bilingual panel, and `GET /ping` carrying the fuse state |
 | [globalchat](mods/globalchat/) | talk to other LocalExile players through the LocalExile global chat server |
 | [waypoint-tools](mods/waypoint-tools/) | lets Waypoint's tools reach the game without the client control bridge: the item crafter gives its items through it |
 | [equipmentfusion](mods/equipmentfusion/) | automatic attributes and defences from non-weapon native skin transfers; donor gems and skills excluded |

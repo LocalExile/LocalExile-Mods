@@ -1,0 +1,15 @@
+{
+  "id": "gm-web-plus",
+  "name": "GM Web Plus",
+  "description": "The GM command panel in the browser at http://127.0.0.1:6111/ (loopback only), with the toolbox extras: a save snapshot taken before the first command, a bilingual 144-card panel, and /fuse to snapshot on demand.",
+  "author": "jienile297-lang",
+  "version": "1.0.0",
+  "compatibleClientVersions": [
+    "0.6.1-beta"
+  ],
+  "kind": "feature",
+  "depends": [
+    "Game"
+  ],
+  "leagues": "all"
+}
