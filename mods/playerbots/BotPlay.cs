@@ -24,7 +24,7 @@ public static partial class BotPlay
         Program.InGame[player] = 0;
         global::HotReload.Register(player);
         Task Join() => JoinArea(player);
-        if (player.Area.Owned) await player.Frames.Run(Join);
+        if (player.Frames.Running) await player.Frames.Run(Join);
         else await Join();
     }
 
@@ -34,6 +34,10 @@ public static partial class BotPlay
         await PopulateArea(player);
         if (player.Closed) return;
         PublishPlayerPose(player);
+        // Broadcast 0x02bb create peer player + TownStance + equipment to humans already past their first frame
+        // (humans still on their first frame receive this bot via their own JoinArea from PublishPlayerPose above).
+        if (player.Frames.Running && player.Instance.PlayersExcept(player.Id).Any(p => p.HasClient && !p.Frames.WaitingFirstFrame(p)))
+            Program.Joining?.Invoke(player);
         EnsurePlayerUpdates(player);
     }
 
@@ -48,7 +52,7 @@ public static partial class BotPlay
             EnsurePlayerUpdates(player);
             moved = MoveControlledFollower(player, at, AreaTime(player));
         }
-        if (player.Area.Owned) await player.Frames.Run(Run);
+        if (player.Frames.Running) await player.Frames.Run(Run);
         else Run();
         return moved;
     }

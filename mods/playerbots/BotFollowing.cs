@@ -77,7 +77,7 @@ public static partial class BotPlay
             plan.FarSince = double.NaN;
             ScheduleControlledIdle(player, plan, now);
             PublishPlayerPose(player);
-            if (player.Area.Owned)
+            if (player.Frames.Running)
                 Program.ToArea(player, InstanceProtocol.Teleport(player.Id, at.X, at.Y, 0x7fffffff),
                     $"0x01b7 bot teleport to ({at.X}, {at.Y})", except: player);
             Console.WriteLine($"[bots] {Program.CharacterName(player)} returns to leader: {distance:0.0} cells -> ({at.X}, {at.Y})");
@@ -187,7 +187,7 @@ public static partial class BotPlay
         player.ChannelSkill = 0;
         var from = player.Walk.Order(at.X, at.Y, now);
         PublishPlayerPose(player);
-        if (player.Area.Owned)
+        if (player.Frames.Running)
             Program.ToArea(player, InstanceProtocol.ActionStarted(player.Id, from.X, from.Y, at.X, at.Y, MoveSkillId, 0xffff, 0x0408),
                 $"0x01ab bot move to ({at.X}, {at.Y})", except: player);
         return true;
